@@ -1,6 +1,28 @@
-/*! A molecular visualizer for Ratatui
+//! # A molecular visualizer for Ratatui
+//!
+//! [Ratatui](https://ratatui.rs/) is an immediate-mode terminal user interface (TUI) library.
+//! `tui-molviz` allows you to show molecules in a Ratatui app.
+//!
+//! # Quick start
+//! ```rust,no_run
+//! use ratatui::crossterm::event;
+//! use ratatui::Frame;
+//!
+//! fn main() -> color_eyre::Result<()> {
+//!     color_eyre::install()?;
+//!
+//!     ratatui::run(|terminal| loop {
+//!         terminal.draw(render)?;
+//!
+//!         if event::read()?.is_key_press() {
+//!             break Ok(());
+//!         }
+//!     })
+//! }
+//!
+//! fn render(frame: &mut Frame<'_>) {}
+//! ```
 
-*/
 use mendeleev::Picometer;
 use ratatui::{
     buffer::Buffer,
