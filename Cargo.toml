@@ -1,0 +1,8 @@
+[package]
+name = "tui-molviz"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mendeleev = "0.8.4"
+ratatui = "0.30.2"
