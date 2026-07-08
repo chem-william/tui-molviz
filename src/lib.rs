@@ -24,10 +24,11 @@
 //! ```
 
 use mendeleev::Picometer;
+pub use mendeleev::{Color, Element};
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
-    style::{Color, Style, Styled},
+    style::{Style, Styled},
     text::{Line, Span},
     widgets::{
         Block, StatefulWidget, Widget,
@@ -69,8 +70,8 @@ impl Camera {
 }
 
 #[must_use]
-pub fn cpk(elem: mendeleev::Element) -> mendeleev::Color {
-    elem.cpk_color().unwrap_or(mendeleev::Color {
+pub fn cpk(elem: Element) -> Color {
+    elem.cpk_color().unwrap_or(Color {
         r: 255,
         g: 110,
         b: 180,
@@ -183,14 +184,14 @@ pub struct MolecularVisualizerState {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Atom {
-    element: mendeleev::Element,
+    element: Element,
     position: [f64; 3],
     covalent_radius: f64, // bonding radius (Å)
 }
 
 impl Atom {
     #[must_use]
-    pub fn new(element: mendeleev::Element, position: [f64; 3]) -> Self {
+    pub fn new(element: Element, position: [f64; 3]) -> Self {
         Atom {
             element,
             position,
@@ -205,7 +206,7 @@ impl Atom {
     }
 
     #[must_use]
-    pub fn element(&self) -> mendeleev::Element {
+    pub fn element(&self) -> Element {
         self.element
     }
 
@@ -446,7 +447,9 @@ impl MolecularVisualizer<'_> {
                 let c = cpk(elem);
                 Span::styled(
                     format!(" {} ", elem.symbol()),
-                    Style::default().fg(Color::Rgb(c.r, c.g, c.b)).bold(),
+                    Style::default()
+                        .fg(ratatui::style::Color::Rgb(c.r, c.g, c.b))
+                        .bold(),
                 )
             })
             .collect::<Vec<_>>();
@@ -471,9 +474,9 @@ impl MolecularVisualizer<'_> {
     /// neighbouring cells share a color and the terminal can run-length batch the
     /// color escapes. Only the dimming is stepped, not the hue.
     #[must_use]
-    pub fn shade(color: &mendeleev::Color, f: f64) -> Color {
+    pub fn shade(color: &Color, f: f64) -> ratatui::style::Color {
         let f = (f.clamp(0.0, 1.0) * 5.0).round() / 5.0;
-        Color::Rgb(
+        ratatui::style::Color::Rgb(
             (f64::from(color.r) * f) as u8,
             (f64::from(color.g) * f) as u8,
             (f64::from(color.b) * f) as u8,
@@ -534,7 +537,7 @@ impl MolecularVisualizer<'_> {
         // Depth factor in [0.4, 1.0]; nearer atoms are brighter.
         let depth = |z: f64| Self::depth_factor(z, zmin, zspan);
 
-        let bond_lines: Vec<(f64, f64, f64, f64, Color)> = if self.show_bonds {
+        let bond_lines: Vec<(f64, f64, f64, f64, ratatui::style::Color)> = if self.show_bonds {
             // Bonds split at their midpoint so each half takes its own atom's depth.
             self.molecule
                 .bonds
@@ -571,7 +574,7 @@ impl MolecularVisualizer<'_> {
         let dot = 1.0 / canvas.dpu; // one braille dot, in world units
         let order = Self::back_to_front_order(&proj_depths);
 
-        let mut groups: Vec<(Color, Vec<(f64, f64)>)> = Vec::new();
+        let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
         for i in order {
             let atom = &self.molecule.atoms[i];
             let color = Self::shade(&cpk(atom.element), depth(proj_depths[i]));
@@ -593,7 +596,7 @@ impl MolecularVisualizer<'_> {
             }
         }
         let drawing_canvas = Canvas::default()
-            .background_color(self.style.bg.unwrap_or(Color::Reset))
+            .background_color(self.style.bg.unwrap_or(ratatui::style::Color::Reset))
             .x_bounds([-canvas.bx, canvas.bx])
             .y_bounds([-canvas.by, canvas.by])
             .paint(move |ctx| {
@@ -792,14 +795,14 @@ mod tests {
             "└─────── N ────────┘",
         ]);
 
-        expected[(9, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(10, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(9, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(10, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(9, 4)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
+        expected[(10, 4)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
+        expected[(9, 5)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
+        expected[(10, 5)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
         for col in [8, 9, 10] {
             expected[(col, 9)].set_style(
                 Style::default()
-                    .fg(Color::Rgb(143, 143, 255))
+                    .fg(ratatui::style::Color::Rgb(143, 143, 255))
                     .add_modifier(Modifier::BOLD),
             );
         }

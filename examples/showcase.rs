@@ -1,6 +1,5 @@
 use std::time::{Duration, Instant};
 
-use mendeleev::Element;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
@@ -9,7 +8,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, Paragraph},
 };
-use tui_molviz::{Atom, Camera, MolecularVisualizer, Molecule};
+use tui_molviz::{Atom, Camera, Element, MolecularVisualizer, Molecule};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;

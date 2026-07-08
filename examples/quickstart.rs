@@ -1,9 +1,5 @@
-use ratatui::{
-    Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    widgets::Block,
-};
-use tui_molviz::{Atom, MolecularVisualizer, Molecule};
+use ratatui::{Frame, crossterm::event, widgets::Block};
+use tui_molviz::{Atom, Element, MolecularVisualizer, Molecule};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
