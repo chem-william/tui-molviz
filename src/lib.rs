@@ -942,4 +942,34 @@ mod tests {
 
         assert_eq!(buffer_lines(&buffer), expected);
     }
+
+    #[test]
+    fn reset_camera() {
+        let h2 = create_h2_molecule();
+        let mut viz = MolecularVisualizer::new(&h2);
+
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buffer = Buffer::empty(area);
+
+        viz.camera
+            .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
+        viz.camera.zoom_by(2.0);
+        viz.camera.reset();
+        viz.render(buffer.area, &mut buffer);
+
+        let expected = vec![
+            "┌────────┐".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│   ⣠⣄   │".to_string(),
+            "│   ⠙⠛⠢⢄⡀│".to_string(),
+            "│       ⠏│".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "└── H ───┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
+    }
 }
