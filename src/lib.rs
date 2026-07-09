@@ -37,7 +37,7 @@ use ratatui::{
 };
 
 /// View orientation (radians) and zoom factor.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     pub yaw: f64,
     pub pitch: f64,
@@ -897,5 +897,32 @@ mod tests {
 
         assert_eq!(camera.yaw, yaw + CAMERA_ROTATION_STEP);
         assert_eq!(camera.pitch, pitch - CAMERA_ROTATION_STEP);
+    }
+
+    #[test]
+    fn zoom_camera() {
+        let h2 = create_h2_molecule();
+        let mut viz = MolecularVisualizer::new(&h2);
+
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buffer = Buffer::empty(area);
+
+        viz.camera.zoom_by(2.0);
+        viz.render(buffer.area, &mut buffer);
+
+        let expected = vec![
+            "┌────────┐".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│  ⣴⣿⣿⣦  │".to_string(),
+            "│  ⠻⣿⣿⠿⢄⡀│".to_string(),
+            "│       ⠈│".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "└── H ───┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
     }
 }
