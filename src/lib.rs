@@ -288,14 +288,11 @@ impl Molecule {
         }
     }
 
-    #[must_use]
-    pub fn from_atoms(atoms: impl IntoIterator<Item = Atom>) -> Self {
-        let mut atoms: Vec<_> = atoms.into_iter().collect();
-
-        Self::recenter(&mut atoms);
-
+    // The floor is 1.0 as a single-atom molecule has radius zero and would
+    // divide by zero in `MoleculeCanvas::new`.
+    fn bounding_radius(atoms: &[Atom]) -> f64 {
         let radius = atoms
-            .iter()
+            .into_iter()
             .map(|a| {
                 (a.position()[0] * a.position()[0]
                     + a.position()[1] * a.position()[1]
@@ -304,8 +301,40 @@ impl Molecule {
             })
             .fold(0.0_f64, f64::max)
             .max(1.0);
+        radius
+    }
 
+    /// Bonds are perceived from interatomic distances.
+    #[must_use]
+    pub fn from_atoms(atoms: impl IntoIterator<Item = Atom>) -> Self {
+        let atoms: Vec<_> = atoms.into_iter().collect();
         let bonds = Self::perceive_bonds(&atoms);
+
+        Self::from_atoms_with_bonds(atoms, bonds)
+    }
+
+    /// # Panics
+    /// If any bond references an atom index outside `atoms`.
+    #[must_use]
+    pub fn from_atoms_with_bonds(
+        atoms: impl IntoIterator<Item = Atom>,
+        bonds: impl IntoIterator<Item = impl Into<Bond>>,
+    ) -> Self {
+        let mut atoms: Vec<_> = atoms.into_iter().collect();
+        let bonds: Vec<_> = bonds.into_iter().map(Into::into).collect();
+
+        for bond in &bonds {
+            assert!(
+                bond.start < atoms.len() && bond.end < atoms.len(),
+                "bond ({}, {}) references an atom outside the {}-atom molecule",
+                bond.start,
+                bond.end,
+                atoms.len()
+            );
+        }
+
+        Self::recenter(&mut atoms);
+        let radius = Self::bounding_radius(&atoms);
         Molecule {
             atoms,
             bonds,
