@@ -887,17 +887,6 @@ mod tests {
     }
 
     const CAMERA_ROTATION_STEP: f64 = 0.12;
-    #[test]
-    fn rotate_camera_applies_yaw_and_pitch_deltas() {
-        let mut camera = Camera::default();
-        let yaw = camera.yaw;
-        let pitch = camera.pitch;
-
-        camera.rotate(CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP);
-
-        assert_eq!(camera.yaw, yaw + CAMERA_ROTATION_STEP);
-        assert_eq!(camera.pitch, pitch - CAMERA_ROTATION_STEP);
-    }
 
     #[test]
     fn zoom_camera() {
@@ -918,6 +907,34 @@ mod tests {
             "│  ⣴⣿⣿⣦  │".to_string(),
             "│  ⠻⣿⣿⠿⢄⡀│".to_string(),
             "│       ⠈│".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "└── H ───┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    #[test]
+    fn rotate_camera() {
+        let h2 = create_h2_molecule();
+        let mut viz = MolecularVisualizer::new(&h2);
+
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buffer = Buffer::empty(area);
+
+        viz.camera
+            .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
+        viz.render(buffer.area, &mut buffer);
+
+        let expected = vec![
+            "┌────────┐".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│        │".to_string(),
+            "│   ⣠⣄ ⣀⣀│".to_string(),
+            "│   ⠙⠋⠉  │".to_string(),
+            "│        │".to_string(),
             "│        │".to_string(),
             "│        │".to_string(),
             "└── H ───┘".to_string(),
