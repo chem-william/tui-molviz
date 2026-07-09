@@ -687,6 +687,32 @@ mod tests {
     }
 
     #[test]
+    fn empty_mol_draws_empty_canvas() {
+        let mol = Molecule::from_atoms(Vec::new());
+        let viz = MolecularVisualizer::new(&mol).show_bonds(true);
+
+        let area = Rect::new(0, 0, 20, 10);
+        let mut buffer = Buffer::empty(area);
+
+        viz.render(buffer.area, &mut buffer);
+
+        let expected = vec![
+            "┌──────────────────┐".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "└──────────────────┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    #[test]
     fn mol_gets_drawn_without_bonds() {
         let mol = create_molecule();
         let viz = MolecularVisualizer::new(&mol).show_bonds(false);
