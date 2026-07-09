@@ -337,15 +337,31 @@ pub struct MolecularVisualizer<'a> {
     block: Option<Block<'a>>,
     /// Base style for the entire widget
     style: Style,
-    /// Whether to show molecule legend or not. Default is `true`.
+    /// Whether to show molecule legend or not. Default is `true`
     show_molecule_legend: bool,
     /// Whether to show bonds between atoms. Default is `true`
     show_bonds: bool,
+    /// The camera used t odisplay the molecule. Used to control rotation and zooming
     camera: Camera,
 }
 
 impl<'a> MolecularVisualizer<'a> {
     /// Creates a new `MolecularVisualiazer` with the given molecule
+    ///
+    /// # Example
+    ///
+    /// This visualizes a simple [`Molecule`]
+    ///
+    /// ```rust
+    /// use tui_molviz::{Atom, Element, MolecularVisualizer, Molecule};
+    ///
+    /// let molecule = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    /// let visualizer = MolecularVisualizer::new(&molecule);
+    /// ```
     #[must_use]
     pub fn new(molecule: &'a Molecule) -> Self {
         Self {
@@ -359,6 +375,8 @@ impl<'a> MolecularVisualizer<'a> {
     }
 
     /// Wraps the visualizer with the given block.
+    ///
+    /// This is a fluent setter method which must be chained or used as it consumes self
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
@@ -367,6 +385,8 @@ impl<'a> MolecularVisualizer<'a> {
 
     /// Sets the camera the molecule is drawn from. Hit-testing with
     /// [`MoleculeCanvas::pick_atom`] must use this same camera.
+    ///
+    /// This is a fluent setter method which must be chained or used as it consumes self
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn camera(mut self, camera: Camera) -> Self {
         self.camera = camera;
