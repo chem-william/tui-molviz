@@ -182,7 +182,7 @@ pub struct MolecularVisualizerState {
     pub canvas: Option<MoleculeCanvas>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Atom {
     element: Element,
     position: [f64; 3],
@@ -230,15 +230,22 @@ impl Atom {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Bond {
-    pub start: usize,
-    pub end: usize,
+    start: usize,
+    end: usize,
+}
+
+impl Bond {
+    #[must_use]
+    fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct Molecule {
-    pub atoms: Vec<Atom>,
-    pub bonds: Vec<Bond>,
-    pub radius: f64, // greatest distance of any atom from the centroid
+    atoms: Vec<Atom>,
+    bonds: Vec<Bond>,
+    radius: f64, // greatest distance of any atom from the centroid
 }
 
 impl Molecule {
@@ -970,5 +977,33 @@ mod tests {
         ];
 
         assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    #[test]
+    fn molecule_has_properties() {
+        let mol = create_molecule();
+
+        assert_eq!(
+            mol.atoms(),
+            &vec![
+                Atom::new(Element::C, [1.0, 0.0, 0.0]),
+                Atom::new(Element::C, [0.0, 1.0, 0.0]),
+                Atom::new(Element::C, [-1.0, 0.0, 0.0]),
+                Atom::new(Element::C, [0.0, -1.0, 0.0]),
+            ]
+        );
+
+        assert_eq!(mol.radius(), 1.0);
+
+        assert_eq!(
+            mol.bonds(),
+            vec![
+                Bond::new(0, 1),
+                Bond::new(0, 3),
+                Bond::new(1, 2),
+                Bond::new(2, 3),
+            ],
+            "molecule had unexpected bonds"
+        );
     }
 }
