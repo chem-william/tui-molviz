@@ -1,3 +1,6 @@
+[![Codecov](https://codecov.io/github/chem-william/tui-molviz/coverage.svg?branch=main)](https://codecov.io/gh/chem-william/tui-molviz)
+[![dependency status](https://deps.rs/repo/github/chem-william/tui-molviz/status.svg)](https://deps.rs/repo/github/chem-william/tui-molviz)
+
 # tui-molviz
 
 A molecular visualizer widget for [Ratatui](https://crates.io/crates/ratatui)
