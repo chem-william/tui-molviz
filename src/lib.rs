@@ -23,8 +23,9 @@
 //! fn render(frame: &mut Frame<'_>) {}
 //! ```
 
+pub use mendeleev::Color as CpkColor;
+pub use mendeleev::Element;
 use mendeleev::Picometer;
-pub use mendeleev::{Color, Element};
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
@@ -70,8 +71,8 @@ impl Camera {
 }
 
 #[must_use]
-pub fn cpk(elem: Element) -> Color {
-    elem.cpk_color().unwrap_or(Color {
+pub fn cpk(elem: Element) -> CpkColor {
+    elem.cpk_color().unwrap_or(CpkColor {
         r: 255,
         g: 110,
         b: 180,
@@ -539,7 +540,7 @@ impl MolecularVisualizer<'_> {
     /// neighbouring cells share a color and the terminal can run-length batch the
     /// color escapes. Only the dimming is stepped, not the hue.
     #[must_use]
-    pub fn shade(color: &Color, f: f64) -> ratatui::style::Color {
+    pub fn shade(color: &CpkColor, f: f64) -> ratatui::style::Color {
         let f = (f.clamp(0.0, 1.0) * 5.0).round() / 5.0;
         ratatui::style::Color::Rgb(
             (f64::from(color.r) * f) as u8,
@@ -693,7 +694,7 @@ impl MolecularVisualizer<'_> {
 mod tests {
     use super::*;
 
-    use ratatui::style::Modifier;
+    use ratatui::style::{Color, Modifier};
 
     fn buffer_lines(buffer: &Buffer) -> Vec<String> {
         let area = *buffer.area();
@@ -910,14 +911,14 @@ mod tests {
             "└─────── N ────────┘",
         ]);
 
-        expected[(9, 4)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
-        expected[(10, 4)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
-        expected[(9, 5)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
-        expected[(10, 5)].set_fg(ratatui::style::Color::Rgb(57, 57, 102));
+        expected[(9, 4)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(10, 4)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(9, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(10, 5)].set_fg(Color::Rgb(57, 57, 102));
         for col in [8, 9, 10] {
             expected[(col, 9)].set_style(
                 Style::default()
-                    .fg(ratatui::style::Color::Rgb(143, 143, 255))
+                    .fg(Color::Rgb(143, 143, 255))
                     .add_modifier(Modifier::BOLD),
             );
         }
