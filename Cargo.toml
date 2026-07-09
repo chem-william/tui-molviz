@@ -2,6 +2,11 @@
 name = "tui-molviz"
 version = "0.1.0"
 edition = "2024"
+description = "A molecular visualizer widget for Ratatui"
+readme = "README.md"
+repository = "https://github.com/chem-william/tui-molviz"
+license = "MIT"
+keywords = ["ratatui", "chemistry"]
 
 [dependencies]
 mendeleev = "0.8.4"
