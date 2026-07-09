@@ -329,6 +329,7 @@ impl Molecule {
     }
 }
 
+#[derive(Debug)]
 pub struct MolecularVisualizer<'a> {
     /// The molecule to visualize
     molecule: &'a Molecule,
