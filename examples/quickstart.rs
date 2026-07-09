@@ -1,4 +1,4 @@
-use ratatui::{Frame, crossterm::event, widgets::Block};
+use ratatui::{Frame, crossterm::event, style::Style, widgets::Block};
 use tui_molviz::{Atom, Element, MolecularVisualizer, Molecule};
 
 fn main() -> color_eyre::Result<()> {

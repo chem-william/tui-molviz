@@ -759,6 +759,31 @@ mod tests {
     }
 
     #[test]
+    fn setting_style_changes_border() {
+        let mol = Molecule::from_atoms(Vec::new());
+        let viz = MolecularVisualizer::new(&mol)
+            .show_bonds(false)
+            .style(Style::new().red())
+            .block(Block::bordered())
+            .show_molecule_legend(true);
+
+        let area = Rect::new(0, 0, 10, 5);
+        let mut buffer = Buffer::empty(area);
+        viz.render(buffer.area, &mut buffer);
+
+        let mut expected = Buffer::with_lines([
+            "┌────────┐",
+            "│        │",
+            "│        │",
+            "│        │",
+            "└────────┘",
+        ]);
+        expected.set_style(buffer.area, Style::new().red());
+
+        assert_eq!(buffer, expected);
+    }
+
+    #[test]
     fn dont_double_draw_block() {
         let mol = create_molecule();
         let viz = MolecularVisualizer::new(&mol)
