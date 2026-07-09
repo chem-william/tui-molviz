@@ -292,8 +292,8 @@ impl Molecule {
     // The floor is 1.0 as a single-atom molecule has radius zero and would
     // divide by zero in `MoleculeCanvas::new`.
     fn bounding_radius(atoms: &[Atom]) -> f64 {
-        let radius = atoms
-            .into_iter()
+        atoms
+            .iter()
             .map(|a| {
                 (a.position()[0] * a.position()[0]
                     + a.position()[1] * a.position()[1]
@@ -301,8 +301,7 @@ impl Molecule {
                     .sqrt()
             })
             .fold(0.0_f64, f64::max)
-            .max(1.0);
-        radius
+            .max(1.0)
     }
 
     /// Bonds are perceived from interatomic distances.
