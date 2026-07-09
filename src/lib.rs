@@ -642,22 +642,46 @@ mod tests {
             .collect()
     }
 
-    fn create_h2_molecule() -> Molecule {
+    fn create_molecule() -> Molecule {
         let atoms = vec![
-            Atom::new(mendeleev::Element::H, [0.0, 0.0, 0.0]),
-            Atom::new(mendeleev::Element::H, [0.0, 0.0, 1.0]),
+            Atom::new(mendeleev::Element::C, [1.0, 0.0, 0.0]),
+            Atom::new(mendeleev::Element::C, [0.0, 1.0, 0.0]),
+            Atom::new(mendeleev::Element::C, [-1.0, 0.0, 0.0]),
+            Atom::new(mendeleev::Element::C, [0.0, -1.0, 0.0]),
         ];
-        Molecule {
-            atoms,
-            bonds: vec![Bond { start: 0, end: 1 }],
-            radius: 1.1,
-        }
+        Molecule::from_atoms(atoms)
     }
 
     #[test]
-    fn h2_gets_drawn() {
-        let h2 = create_h2_molecule();
-        let viz = MolecularVisualizer::new(&h2);
+    fn mol_gets_drawn() {
+        let mol = create_molecule();
+        let viz = MolecularVisualizer::new(&mol).show_bonds(true);
+
+        let area = Rect::new(0, 0, 20, 10);
+        let mut buffer = Buffer::empty(area);
+
+        viz.render(buffer.area, &mut buffer);
+
+        let expected = vec![
+            "┌──────────────────┐".to_string(),
+            "│       ⢿⣿⣿⣿⡀      │".to_string(),
+            "│      ⡰⠁ ⠁ ⠈⠢⡀  ⡀ │".to_string(),
+            "│    ⢀⠎       ⠈⣾⣿⣿⣿│".to_string(),
+            "│⣀⣀⣀⡰⠁        ⠈⣿⣿⣿⣿│".to_string(),
+            "│⣿⣿⣿⣿⡀        ⢀⠎⠉⠉⠉│".to_string(),
+            "│⣿⣿⣿⡿⡀       ⡰⠁    │".to_string(),
+            "│ ⠈  ⠈⠢⡀  ⡀⢀⠎      │".to_string(),
+            "│      ⠈⣿⣿⣿⣷       │".to_string(),
+            "└─────── C ────────┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    #[test]
+    fn mol_gets_drawn_without_bonds() {
+        let mol = create_molecule();
+        let viz = MolecularVisualizer::new(&mol).show_bonds(false);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -665,48 +689,23 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│        ⣠⣄        │".to_string(),
-            "│        ⠙⠛⠢⢄⡀⣀    │".to_string(),
-            "│            ⠸⣿⠇   │".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "└─────── H ────────┘".to_string(),
-        ];
-
-        assert_eq!(buffer_lines(&buffer), expected);
-    }
-
-    #[test]
-    fn h2_gets_drawn_without_bonds() {
-        let h2 = create_h2_molecule();
-        let viz = MolecularVisualizer::new(&h2).show_bonds(false);
-
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
-
-        let expected = vec![
-            "┌──────────────────┐".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│        ⣠⣄        │".to_string(),
-            "│        ⠙⠋   ⣀    │".to_string(),
-            "│            ⠸⣿⠇   │".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "└─────── H ────────┘".to_string(),
+            "│       ⢿⣿⣿⡿       │".to_string(),
+            "│         ⠁      ⡀ │".to_string(),
+            "│              ⣾⣿⣿⣿│".to_string(),
+            "│⣀⣀⣀⡀         ⠈⣿⣿⣿⣿│".to_string(),
+            "│⣿⣿⣿⣿⡀         ⠈⠉⠉⠉│".to_string(),
+            "│⣿⣿⣿⡿              │".to_string(),
+            "│ ⠈       ⡀        │".to_string(),
+            "│       ⣾⣿⣿⣷       │".to_string(),
+            "└─────── C ────────┘".to_string(),
         ];
         assert_eq!(buffer_lines(&buffer), expected);
     }
 
     #[test]
-    fn h2_gets_drawn_without_legend() {
-        let h2 = create_h2_molecule();
-        let viz = MolecularVisualizer::new(&h2)
+    fn mol_gets_drawn_without_legend() {
+        let mol = create_molecule();
+        let viz = MolecularVisualizer::new(&mol)
             .show_bonds(false)
             .show_molecule_legend(false)
             .block(Block::bordered());
@@ -717,9 +716,9 @@ mod tests {
 
         let expected = vec![
             "┌────────┐".to_string(),
-            "│        │".to_string(),
-            "│   ⠰⠆⣤⡄ │".to_string(),
-            "│     ⠉⠁ │".to_string(),
+            "│   ⠲⠖⢀⣤⣄│".to_string(),
+            "│⣴⣶⡄  ⠘⠿⠟│".to_string(),
+            "│⠙⠛⠁⠴⠦   │".to_string(),
             "└────────┘".to_string(),
         ];
         assert_eq!(buffer_lines(&buffer), expected);
@@ -727,8 +726,8 @@ mod tests {
 
     #[test]
     fn dont_double_draw_block() {
-        let h2 = create_h2_molecule();
-        let viz = MolecularVisualizer::new(&h2)
+        let mol = create_molecule();
+        let viz = MolecularVisualizer::new(&mol)
             .show_bonds(false)
             .block(Block::bordered().title("user"))
             .show_molecule_legend(true);
@@ -739,18 +738,18 @@ mod tests {
 
         let expected = vec![
             "┌user────┐".to_string(),
-            "│        │".to_string(),
-            "│   ⠰⠆⣤⡄ │".to_string(),
-            "│     ⠉⠁ │".to_string(),
-            "└── H ───┘".to_string(),
+            "│   ⠲⠖⢀⣤⣄│".to_string(),
+            "│⣴⣶⡄  ⠘⠿⠟│".to_string(),
+            "│⠙⠛⠁⠴⠦   │".to_string(),
+            "└── C ───┘".to_string(),
         ];
         assert_eq!(buffer_lines(&buffer), expected);
     }
 
     #[test]
     fn render_in_minimal_buffer() {
-        let h2 = create_h2_molecule();
-        let chart = MolecularVisualizer::new(&h2);
+        let mol = create_molecule();
+        let chart = MolecularVisualizer::new(&mol);
 
         let mut buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
         // This should not panic, even if the buffer is too small to render the chart.
@@ -760,8 +759,8 @@ mod tests {
 
     #[test]
     fn render_in_zero_size_buffer() {
-        let h2 = create_h2_molecule();
-        let chart = MolecularVisualizer::new(&h2);
+        let mol = create_molecule();
+        let chart = MolecularVisualizer::new(&mol);
 
         let mut buffer = Buffer::empty(Rect::ZERO);
         // This should not panic, even if the buffer has zero size.
@@ -890,26 +889,26 @@ mod tests {
 
     #[test]
     fn zoom_camera() {
-        let h2 = create_h2_molecule();
-        let mut viz = MolecularVisualizer::new(&h2);
+        let mol = create_molecule();
+        let mut viz = MolecularVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 10, 10);
+        let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
 
         viz.camera.zoom_by(2.0);
         viz.render(buffer.area, &mut buffer);
 
         let expected = vec![
-            "┌────────┐".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│  ⣴⣿⣿⣦  │".to_string(),
-            "│  ⠻⣿⣿⠿⢄⡀│".to_string(),
-            "│       ⠈│".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "└── H ───┘".to_string(),
+            "┌──────────────────┐".to_string(),
+            "│ ⢀⠎               │".to_string(),
+            "│⡰⠁                │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│                ⢀⠎│".to_string(),
+            "│               ⡰⠁ │".to_string(),
+            "└─────── C ────────┘".to_string(),
         ];
 
         assert_eq!(buffer_lines(&buffer), expected);
@@ -917,10 +916,10 @@ mod tests {
 
     #[test]
     fn rotate_camera() {
-        let h2 = create_h2_molecule();
-        let mut viz = MolecularVisualizer::new(&h2);
+        let mol = create_molecule();
+        let mut viz = MolecularVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 10, 10);
+        let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
 
         viz.camera
@@ -928,16 +927,16 @@ mod tests {
         viz.render(buffer.area, &mut buffer);
 
         let expected = vec![
-            "┌────────┐".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│   ⣠⣄ ⣀⣀│".to_string(),
-            "│   ⠙⠋⠉  │".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "└── H ───┘".to_string(),
+            "┌──────────────────┐".to_string(),
+            "│       ⢶⣾⣷⡶       │".to_string(),
+            "│    ⢀⣤⣴⣼⣄⢹        │".to_string(),
+            "│    ⢼⣿⣿⣿⣿⠄⡇       │".to_string(),
+            "│    ⠘⠿⢿⡿⠟ ⢣       │".to_string(),
+            "│       ⢣ ⣴⣾⣷⣶⡄    │".to_string(),
+            "│       ⢸⠐⣿⣿⣿⣿⡗    │".to_string(),
+            "│        ⡇⡙⡟⠟⠛⠁    │".to_string(),
+            "│       ⠾⢿⡿⠷       │".to_string(),
+            "└─────── C ────────┘".to_string(),
         ];
 
         assert_eq!(buffer_lines(&buffer), expected);
@@ -945,10 +944,10 @@ mod tests {
 
     #[test]
     fn reset_camera() {
-        let h2 = create_h2_molecule();
-        let mut viz = MolecularVisualizer::new(&h2);
+        let mol = create_molecule();
+        let mut viz = MolecularVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 10, 10);
+        let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
 
         viz.camera
@@ -958,16 +957,16 @@ mod tests {
         viz.render(buffer.area, &mut buffer);
 
         let expected = vec![
-            "┌────────┐".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "│   ⣠⣄   │".to_string(),
-            "│   ⠙⠛⠢⢄⡀│".to_string(),
-            "│       ⠏│".to_string(),
-            "│        │".to_string(),
-            "│        │".to_string(),
-            "└── H ───┘".to_string(),
+            "┌──────────────────┐".to_string(),
+            "│       ⢿⣿⣿⣿⡀      │".to_string(),
+            "│      ⡰⠁ ⠁ ⠈⠢⡀  ⡀ │".to_string(),
+            "│    ⢀⠎       ⠈⣾⣿⣿⣿│".to_string(),
+            "│⣀⣀⣀⡰⠁        ⠈⣿⣿⣿⣿│".to_string(),
+            "│⣿⣿⣿⣿⡀        ⢀⠎⠉⠉⠉│".to_string(),
+            "│⣿⣿⣿⡿⡀       ⡰⠁    │".to_string(),
+            "│ ⠈  ⠈⠢⡀  ⡀⢀⠎      │".to_string(),
+            "│      ⠈⣿⣿⣿⣷       │".to_string(),
+            "└─────── C ────────┘".to_string(),
         ];
 
         assert_eq!(buffer_lines(&buffer), expected);
