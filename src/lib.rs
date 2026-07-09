@@ -65,7 +65,7 @@ impl Camera {
     }
 
     pub fn zoom_by(&mut self, factor: f64) {
-        self.zoom *= factor;
+        self.zoom = (self.zoom * factor).clamp(0.1, 100.0);
     }
 }
 
