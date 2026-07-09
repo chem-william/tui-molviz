@@ -478,6 +478,14 @@ impl Widget for &MolecularVisualizer<'_> {
     }
 }
 
+impl StatefulWidget for MolecularVisualizer<'_> {
+    type State = MolecularVisualizerState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        StatefulWidget::render(&self, area, buf, state);
+    }
+}
+
 impl StatefulWidget for &MolecularVisualizer<'_> {
     type State = MolecularVisualizerState;
 
@@ -717,7 +725,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
 
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -743,7 +751,7 @@ mod tests {
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
 
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -768,7 +776,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -795,7 +803,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 10, 5);
         let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌────────┐".to_string(),
@@ -818,7 +826,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 10, 5);
         let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let mut expected = Buffer::with_lines([
             "┌────────┐",
@@ -842,7 +850,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 10, 5);
         let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌user────┐".to_string(),
@@ -861,7 +869,7 @@ mod tests {
 
         let mut buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
         // This should not panic, even if the buffer is too small to render the chart.
-        chart.render(buffer.area, &mut buffer);
+        Widget::render(&chart, buffer.area, &mut buffer);
         assert_eq!(buffer, Buffer::with_lines(["┌"]));
     }
 
@@ -872,7 +880,7 @@ mod tests {
 
         let mut buffer = Buffer::empty(Rect::ZERO);
         // This should not panic, even if the buffer has zero size.
-        chart.render(buffer.area, &mut buffer);
+        Widget::render(&chart, buffer.area, &mut buffer);
     }
 
     #[test]
@@ -887,7 +895,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let mut expected = Buffer::with_lines([
             "┌──────────────────┐",
@@ -1004,7 +1012,7 @@ mod tests {
         let mut buffer = Buffer::empty(area);
 
         viz.camera.zoom_by(2.0);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -1032,7 +1040,7 @@ mod tests {
 
         viz.camera
             .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -1062,7 +1070,7 @@ mod tests {
             .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
         viz.camera.zoom_by(2.0);
         viz.camera.reset();
-        viz.render(buffer.area, &mut buffer);
+        Widget::render(&viz, buffer.area, &mut buffer);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
