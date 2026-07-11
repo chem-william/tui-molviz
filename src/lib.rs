@@ -242,6 +242,12 @@ impl Bond {
     }
 }
 
+impl From<(usize, usize)> for Bond {
+    fn from((start, end): (usize, usize)) -> Self {
+        Self { start, end }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Molecule {
     atoms: Vec<Atom>,
@@ -1086,6 +1092,18 @@ mod tests {
         ];
 
         assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    #[test]
+    fn bonds_can_be_supplied_as_tuples() {
+        let atoms = vec![
+            Atom::new(Element::C, [0.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.5, 0.0, 0.0]),
+            Atom::new(Element::C, [3.0, 0.0, 0.0]),
+        ];
+        let mol = Molecule::from_atoms_with_bonds(atoms, [(0, 1), (1, 2)]);
+
+        assert_eq!(mol.bonds(), vec![Bond::new(0, 1), Bond::new(1, 2)]);
     }
 
     #[test]
