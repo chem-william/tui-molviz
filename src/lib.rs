@@ -36,6 +36,7 @@ use ratatui::{
         canvas::{Canvas, Line as CanvasLine, Points},
     },
 };
+use thiserror::Error;
 
 /// View orientation (radians) and zoom factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -256,25 +257,16 @@ impl From<(usize, usize)> for Bond {
 }
 
 /// A bond referenced an atom index outside the molecule's atom list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error(
+    "bond ({}, {}) references an atom outside the {atom_count}-atom molecule",
+    bond.start(),
+    bond.end()
+)]
 pub struct InvalidBondError {
     pub bond: Bond,
     pub atom_count: usize,
 }
-
-impl std::fmt::Display for InvalidBondError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "bond ({}, {}) references an atom outside the {}-atom molecule",
-            self.bond.start(),
-            self.bond.end(),
-            self.atom_count
-        )
-    }
-}
-
-impl std::error::Error for InvalidBondError {}
 
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 pub struct Molecule {

@@ -1584,6 +1584,7 @@ dependencies = [
  "color-eyre",
  "mendeleev",
  "ratatui",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
