@@ -228,7 +228,7 @@ impl Atom {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bond {
     start: usize,
     end: usize,
@@ -255,7 +255,7 @@ impl From<(usize, usize)> for Bond {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 pub struct Molecule {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
