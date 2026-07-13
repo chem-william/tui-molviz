@@ -157,6 +157,12 @@ pub struct MolecularVisualizer<'a> {
     show_bonds: bool,
     /// The camera used to display the molecule. Used to control rotation and zooming
     camera: Camera,
+    /// Atom index to draw a highlight marker on, if any. Out-of-range indices
+    /// are ignored at render time. Default is `None`.
+    highlight: Option<usize>,
+    /// Style of the highlight marker (its `fg` color is used). `None` disables
+    /// the highlight even when [`highlight`](Self::highlight) is set.
+    highlight_style: Option<Style>,
 }
 
 impl<'a> MolecularVisualizer<'a> {
@@ -186,6 +192,8 @@ impl<'a> MolecularVisualizer<'a> {
             show_molecule_legend: true,
             show_bonds: true,
             camera: Camera::default(),
+            highlight: None,
+            highlight_style: Some(Style::default().fg(Self::DEFAULT_HIGHLIGHT_COLOR)),
         }
     }
 
@@ -236,6 +244,28 @@ impl<'a> MolecularVisualizer<'a> {
     #[must_use]
     pub fn style<S: Into<Style>>(mut self, style: S) -> Self {
         self.style = style.into();
+        self
+    }
+
+    /// Highlights the atom at the given index by drawing a marker ring around it,
+    /// or clears the highlight with `None`. The index is typically one returned by
+    /// [`MoleculeCanvas::pick_atom`]; out-of-range indices are ignored at render time.
+    ///
+    /// This is a fluent setter method which must be chained or used as it consumes self
+    #[must_use = "method moves the value of self and returns the modified value"]
+    pub const fn highlight(mut self, highlight: Option<usize>) -> Self {
+        self.highlight = highlight;
+        self
+    }
+
+    /// Sets the style of the highlight marker; the marker ring is drawn in the
+    /// style's foreground color. Passing `None` disables the highlight entirely,
+    /// even when an atom is selected via [`highlight`](Self::highlight).
+    ///
+    /// This is a fluent setter method which must be chained or used as it consumes self
+    #[must_use = "method moves the value of self and returns the modified value"]
+    pub const fn highlight_style(mut self, style: Option<Style>) -> Self {
+        self.highlight_style = style;
         self
     }
 }
@@ -293,6 +323,36 @@ impl MolecularVisualizer<'_> {
         g: 120,
         b: 120,
     };
+    /// Fallback marker color when the highlight style has no foreground set.
+    const DEFAULT_HIGHLIGHT_COLOR: ratatui::style::Color = ratatui::style::Color::White;
+    /// Gap, in braille dots, between an atom's drawn disk and its highlight ring.
+    const HIGHLIGHT_RING_GAP_DOTS: f64 = 1.5;
+    /// Number of points sampled around the highlight ring.
+    const HIGHLIGHT_RING_STEPS: u32 = 48;
+
+    /// The marker ring for the highlighted atom, if one is set, its style has a
+    /// marker color, and the index is in range. Returns the ring's braille points
+    /// (in canvas-data coords) and color, for drawing on top of the molecule.
+    fn highlight_ring(
+        &self,
+        proj: &[(f64, f64, f64)],
+        canvas: &MoleculeCanvas,
+    ) -> Option<(Vec<(f64, f64)>, ratatui::style::Color)> {
+        let i = self.highlight.filter(|&i| i < proj.len())?;
+        let color = self.highlight_style?.fg.unwrap_or(Self::DEFAULT_HIGHLIGHT_COLOR);
+
+        let dot = 1.0 / canvas.dpu; // one braille dot, in world units
+        let r_dots = canvas.atom_radius_dots(self.molecule.atoms()[i].covalent_radius());
+        let r_ring = (r_dots + Self::HIGHLIGHT_RING_GAP_DOTS) * dot;
+        let pts = (0..Self::HIGHLIGHT_RING_STEPS)
+            .map(|k| {
+                let theta = std::f64::consts::TAU * f64::from(k) / f64::from(Self::HIGHLIGHT_RING_STEPS);
+                let (s, c) = theta.sin_cos();
+                (proj[i].0 + r_ring * c, proj[i].1 + r_ring * s)
+            })
+            .collect();
+        Some((pts, color))
+    }
 
     /// A color key for the elements actually in the molecule (each element's
     /// symbol drawn in its CPK color), so the structure is readable without already
@@ -451,6 +511,9 @@ impl MolecularVisualizer<'_> {
                 }
             }
         }
+        // Drawn last, on top of the atom it marks, so the selection stays visible.
+        let highlight_ring = self.highlight_ring(&proj, &canvas);
+
         let drawing_canvas = Canvas::default()
             .background_color(self.style.bg.unwrap_or(ratatui::style::Color::Reset))
             .x_bounds([-canvas.bx, canvas.bx])
@@ -467,6 +530,13 @@ impl MolecularVisualizer<'_> {
                 }
 
                 for (color, pts) in &groups {
+                    ctx.draw(&Points {
+                        coords: pts,
+                        color: *color,
+                    });
+                }
+
+                if let Some((pts, color)) = &highlight_ring {
                     ctx.draw(&Points {
                         coords: pts,
                         color: *color,
@@ -508,6 +578,66 @@ mod tests {
             Atom::new(Element::C, [0.0, -1.0, 0.0]),
         ];
         atoms.into_iter().collect()
+    }
+
+    fn painted_cells(buffer: &Buffer) -> usize {
+        buffer_lines(buffer)
+            .iter()
+            .flat_map(|line| line.chars())
+            .filter(|c| !c.is_whitespace())
+            .count()
+    }
+
+    fn render_to_buffer(viz: &MolecularVisualizer<'_>) -> Buffer {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 10));
+        Widget::render(viz, buffer.area, &mut buffer);
+        buffer
+    }
+
+    #[test]
+    fn highlight_adds_a_marker_ring() {
+        let mol = create_molecule();
+        let plain = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let marked = render_to_buffer(
+            &MolecularVisualizer::new(&mol)
+                .show_bonds(false)
+                .highlight(Some(0)),
+        );
+
+        assert!(
+            painted_cells(&marked) > painted_cells(&plain),
+            "highlighting an atom should paint additional marker cells"
+        );
+    }
+
+    #[test]
+    fn highlight_style_none_suppresses_the_marker() {
+        let mol = create_molecule();
+        let no_highlight = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let suppressed = render_to_buffer(
+            &MolecularVisualizer::new(&mol)
+                .show_bonds(false)
+                .highlight(Some(0))
+                .highlight_style(None),
+        );
+
+        assert_eq!(
+            no_highlight, suppressed,
+            "highlight_style(None) should draw exactly as if no atom were highlighted"
+        );
+    }
+
+    #[test]
+    fn out_of_range_highlight_is_ignored() {
+        let mol = create_molecule();
+        let no_highlight = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let out_of_range = render_to_buffer(
+            &MolecularVisualizer::new(&mol)
+                .show_bonds(false)
+                .highlight(Some(999)),
+        );
+
+        assert_eq!(no_highlight, out_of_range);
     }
 
     #[test]
