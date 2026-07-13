@@ -8,8 +8,9 @@ use ratatui::{
     text::Line,
     widgets::{Block, Paragraph},
 };
+use tui_molviz::camera::Camera;
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{Camera, Element, MolecularVisualizer};
+use tui_molviz::{Element, MolecularVisualizer};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
