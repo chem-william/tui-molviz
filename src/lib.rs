@@ -23,9 +23,11 @@
 //! fn render(frame: &mut Frame<'_>) {}
 //! ```
 
+pub mod molecule;
+use crate::molecule::Molecule;
+
 pub use mendeleev::Color as CpkColor;
 pub use mendeleev::Element;
-use mendeleev::Picometer;
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
@@ -36,7 +38,6 @@ use ratatui::{
         canvas::{Canvas, Line as CanvasLine, Points},
     },
 };
-use thiserror::Error;
 
 /// View orientation (radians) and zoom factor.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -164,7 +165,7 @@ impl MoleculeCanvas {
         let py = self.by - fy * 2.0 * self.by;
 
         molecule
-            .atoms
+            .atoms()
             .iter()
             .enumerate()
             .filter_map(|(i, atom)| {
@@ -188,236 +189,6 @@ pub struct MolecularVisualizerState {
     pub canvas: Option<MoleculeCanvas>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Atom {
-    element: Element,
-    position: [f64; 3],
-    covalent_radius: f64, // bonding radius (Å)
-}
-
-impl Atom {
-    #[must_use]
-    pub fn new(element: Element, position: [f64; 3]) -> Self {
-        Atom {
-            element,
-            position,
-            covalent_radius: Self::bond_radius(element),
-        }
-    }
-
-    #[must_use]
-    pub fn with_covalent_radius(mut self, radius: f64) -> Self {
-        self.covalent_radius = radius;
-        self
-    }
-
-    #[must_use]
-    pub fn element(&self) -> Element {
-        self.element
-    }
-
-    #[must_use]
-    pub fn position(&self) -> [f64; 3] {
-        self.position
-    }
-
-    #[must_use]
-    pub fn covalent_radius(&self) -> f64 {
-        self.covalent_radius
-    }
-
-    fn bond_radius(elem: Element) -> f64 {
-        elem.atomic_radius()
-            .unwrap_or_else(|| Picometer(f64::from(elem.atomic_number()) * 10.0))
-            .0
-            / 100.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Bond {
-    start: usize,
-    end: usize,
-}
-
-impl Bond {
-    #[must_use]
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-
-    pub fn start(&self) -> usize {
-        self.start
-    }
-
-    pub fn end(&self) -> usize {
-        self.end
-    }
-}
-
-impl From<(usize, usize)> for Bond {
-    fn from((start, end): (usize, usize)) -> Self {
-        Self { start, end }
-    }
-}
-
-/// A bond referenced an atom index outside the molecule's atom list.
-#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
-#[error(
-    "bond ({}, {}) references an atom outside the {atom_count}-atom molecule",
-    bond.start(),
-    bond.end()
-)]
-pub struct InvalidBondError {
-    pub bond: Bond,
-    pub atom_count: usize,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
-pub struct Molecule {
-    atoms: Vec<Atom>,
-    bonds: Vec<Bond>,
-    radius: f64, // greatest distance of any atom from the centroid
-}
-
-impl Molecule {
-    /// Below this separation (Å), atoms are treated as coincident (e.g.
-    /// duplicate input) rather than bonded.
-    const MIN_BOND_DISTANCE: f64 = 0.4;
-    /// A bond is perceived when interatomic distance is within this multiple
-    /// of the atoms' summed covalent radii.
-    const BOND_DISTANCE_TOLERANCE: f64 = 1.3;
-
-    fn perceive_bonds(atoms: &[Atom]) -> Vec<Bond> {
-        let mut bonds = Vec::new();
-        for i in 0..atoms.len() {
-            for j in (i + 1)..atoms.len() {
-                let (a, b) = (&atoms[i], &atoms[j]);
-                let d = ((a.position()[0] - b.position()[0]).powi(2)
-                    + (a.position()[1] - b.position()[1]).powi(2)
-                    + (a.position()[2] - b.position()[2]).powi(2))
-                .sqrt();
-                let bond_cutoff =
-                    (a.covalent_radius() + b.covalent_radius()) * Self::BOND_DISTANCE_TOLERANCE;
-                if d > Self::MIN_BOND_DISTANCE && d <= bond_cutoff {
-                    bonds.push(Bond { start: i, end: j });
-                }
-            }
-        }
-        bonds
-    }
-
-    fn recenter(atoms: &mut [Atom]) {
-        if atoms.is_empty() {
-            return;
-        }
-
-        let n = atoms.len() as f64;
-        let (mut cx, mut cy, mut cz) = (0.0, 0.0, 0.0);
-        for a in atoms.iter() {
-            cx += a.position()[0];
-            cy += a.position()[1];
-            cz += a.position()[2];
-        }
-        cx /= n;
-        cy /= n;
-        cz /= n;
-        for a in atoms.iter_mut() {
-            a.position[0] -= cx;
-            a.position[1] -= cy;
-            a.position[2] -= cz;
-        }
-    }
-
-    // The floor is 1.0 as a single-atom molecule has radius zero and would
-    // divide by zero in `MoleculeCanvas::new`.
-    fn bounding_radius(atoms: &[Atom]) -> f64 {
-        atoms
-            .iter()
-            .map(|a| {
-                (a.position()[0] * a.position()[0]
-                    + a.position()[1] * a.position()[1]
-                    + a.position()[2] * a.position()[2])
-                    .sqrt()
-            })
-            .fold(0.0_f64, f64::max)
-            .max(1.0)
-    }
-
-    /// Bonds are perceived from interatomic distances.
-    #[must_use]
-    pub fn from_atoms(atoms: impl IntoIterator<Item = Atom>) -> Self {
-        let atoms: Vec<_> = atoms.into_iter().collect();
-        let bonds = Self::perceive_bonds(&atoms);
-
-        Self::from_atoms_with_bonds(atoms, bonds)
-    }
-
-    /// # Panics
-    /// If any bond references an atom index outside `atoms`.
-    #[must_use]
-    pub fn from_atoms_with_bonds(
-        atoms: impl IntoIterator<Item = Atom>,
-        bonds: impl IntoIterator<Item = impl Into<Bond>>,
-    ) -> Self {
-        match Self::try_from_atoms_with_bonds(atoms, bonds) {
-            Ok(molecule) => molecule,
-            Err(err) => panic!("{err}"),
-        }
-    }
-
-    /// Fallible version of [`Molecule::from_atoms_with_bonds`], for bonds
-    /// coming from untrusted input (e.g. a parsed file) rather than
-    /// hand-written call sites.
-    pub fn try_from_atoms_with_bonds(
-        atoms: impl IntoIterator<Item = Atom>,
-        bonds: impl IntoIterator<Item = impl Into<Bond>>,
-    ) -> Result<Self, InvalidBondError> {
-        let mut atoms: Vec<_> = atoms.into_iter().collect();
-        let bonds: Vec<_> = bonds.into_iter().map(Into::into).collect();
-
-        if let Some(&bond) = bonds
-            .iter()
-            .find(|bond| bond.start >= atoms.len() || bond.end >= atoms.len())
-        {
-            return Err(InvalidBondError {
-                bond,
-                atom_count: atoms.len(),
-            });
-        }
-
-        Self::recenter(&mut atoms);
-        let radius = Self::bounding_radius(&atoms);
-        Ok(Molecule {
-            atoms,
-            bonds,
-            radius,
-        })
-    }
-
-    #[must_use]
-    pub fn atoms(&self) -> &[Atom] {
-        &self.atoms
-    }
-
-    #[must_use]
-    pub fn bonds(&self) -> &[Bond] {
-        &self.bonds
-    }
-
-    #[must_use]
-    pub fn radius(&self) -> f64 {
-        self.radius
-    }
-}
-
-impl FromIterator<Atom> for Molecule {
-    /// Bonds are perceived from interatomic distances, same as [`Molecule::from_atoms`].
-    fn from_iter<T: IntoIterator<Item = Atom>>(iter: T) -> Self {
-        Self::from_atoms(iter)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct MolecularVisualizer<'a> {
     /// The molecule to visualize
@@ -430,19 +201,20 @@ pub struct MolecularVisualizer<'a> {
     show_molecule_legend: bool,
     /// Whether to show bonds between atoms. Default is `true`
     show_bonds: bool,
-    /// The camera used t odisplay the molecule. Used to control rotation and zooming
+    /// The camera used to display the molecule. Used to control rotation and zooming
     camera: Camera,
 }
 
 impl<'a> MolecularVisualizer<'a> {
-    /// Creates a new `MolecularVisualiazer` with the given molecule
+    /// Creates a new `MolecularVisualizer` with the given molecule
     ///
     /// # Example
     ///
     /// This visualizes a simple [`Molecule`]
     ///
     /// ```rust
-    /// use tui_molviz::{Atom, Element, MolecularVisualizer, Molecule};
+    /// use tui_molviz::molecule::{Atom, Molecule};
+    /// use tui_molviz::{Element, MolecularVisualizer};
     ///
     /// let molecule = Molecule::from_atoms([
     ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
@@ -573,9 +345,9 @@ impl MolecularVisualizer<'_> {
     /// knowing the palette. Empty when the molecule has no atoms.
     fn draw_molecule_legend(&self) -> Line<'static> {
         let mut seen: Vec<Element> = Vec::new();
-        for atom in &self.molecule.atoms {
-            if !seen.contains(&atom.element) {
-                seen.push(atom.element);
+        for atom in self.molecule.atoms() {
+            if !seen.contains(&atom.element()) {
+                seen.push(atom.element());
             }
         }
 
@@ -646,14 +418,14 @@ impl MolecularVisualizer<'_> {
     }
 
     fn render_molecule(&self, area: Rect, buf: &mut Buffer) -> MoleculeCanvas {
-        let canvas = MoleculeCanvas::new(area, self.molecule.radius, self.camera.zoom);
+        let canvas = MoleculeCanvas::new(area, self.molecule.radius(), self.camera.zoom);
         if area.is_empty() {
             return canvas;
         }
 
         let proj: Vec<(f64, f64, f64)> = self
             .molecule
-            .atoms
+            .atoms()
             .iter()
             .map(|atom| {
                 let [x, y, z] = atom.position();
@@ -668,27 +440,27 @@ impl MolecularVisualizer<'_> {
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
         let zspan = (zmax - zmin).max(1e-6);
-        // Depth factor in [0.4, 1.0]; nearer atoms are brighter.
+        // Nearer atoms are brighter.
         let depth = |z: f64| Self::depth_factor(z, zmin, zspan);
 
         let bond_lines: Vec<(f64, f64, f64, f64, ratatui::style::Color)> = if self.show_bonds {
             // Bonds split at their midpoint so each half takes its own atom's depth.
             self.molecule
-                .bonds
+                .bonds()
                 .iter()
                 .map(|&bond| {
                     let color = Self::shade(
                         &Self::BOND_COLOR,
                         depth(f64::midpoint(
-                            proj_depths[bond.start],
-                            proj_depths[bond.end],
+                            proj_depths[bond.start()],
+                            proj_depths[bond.end()],
                         )),
                     );
                     (
-                        proj[bond.start].0,
-                        proj[bond.start].1,
-                        proj[bond.end].0,
-                        proj[bond.end].1,
+                        proj[bond.start()].0,
+                        proj[bond.start()].1,
+                        proj[bond.end()].0,
+                        proj[bond.end()].1,
                         color,
                     )
                 })
@@ -706,8 +478,8 @@ impl MolecularVisualizer<'_> {
 
         let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
         for i in order {
-            let atom = &self.molecule.atoms[i];
-            let color = Self::shade(&cpk(atom.element), depth(proj_depths[i]));
+            let atom = &self.molecule.atoms()[i];
+            let color = Self::shade(&cpk(atom.element()), depth(proj_depths[i]));
             if groups.last().map(|(c, _)| *c) != Some(color) {
                 groups.push((color, Vec::new()));
             }
@@ -756,6 +528,8 @@ impl MolecularVisualizer<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::molecule::{Atom, Bond};
+
     use super::*;
 
     use ratatui::style::{Color, Modifier};
@@ -950,12 +724,9 @@ mod tests {
 
     #[test]
     fn atoms_have_color() {
-        let atoms = vec![Atom::new(Element::N, [0.0, 0.0, 0.0])];
-        let molecule = Molecule {
-            atoms,
-            bonds: Vec::new(),
-            radius: 10.1,
-        };
+        let molecule = vec![Atom::new(Element::N, [0.0, 0.0, 0.0])]
+            .into_iter()
+            .collect();
         let viz = MolecularVisualizer::new(&molecule);
 
         let area = Rect::new(0, 0, 20, 10);
@@ -966,19 +737,27 @@ mod tests {
             "┌──────────────────┐",
             "│                  │",
             "│                  │",
-            "│                  │",
-            "│        ⢀⡀        │",
-            "│        ⠈⠁        │",
-            "│                  │",
+            "│         ⡀        │",
+            "│       ⣾⣿⣿⣷       │",
+            "│      ⠈⢿⣿⣿⡿⠁      │",
+            "│         ⠁        │",
             "│                  │",
             "│                  │",
             "└─────── N ────────┘",
         ]);
 
+        expected[(10, 3)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(8, 4)].set_fg(Color::Rgb(57, 57, 102));
         expected[(9, 4)].set_fg(Color::Rgb(57, 57, 102));
         expected[(10, 4)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(11, 4)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(7, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(8, 5)].set_fg(Color::Rgb(57, 57, 102));
         expected[(9, 5)].set_fg(Color::Rgb(57, 57, 102));
         expected[(10, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(11, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(12, 5)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(10, 6)].set_fg(Color::Rgb(57, 57, 102));
         for col in [8, 9, 10] {
             expected[(col, 9)].set_style(
                 Style::default()
@@ -1015,12 +794,8 @@ mod tests {
 
     #[test]
     fn pick_atom_maps_center_cell_to_origin_atom() {
-        let molecule = Molecule {
-            atoms: vec![atom(0.0, 0.0, 0.0)],
-            bonds: vec![],
-            radius: 1.0,
-        };
-        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius, 1.0);
+        let molecule: Molecule = vec![atom(0.0, 0.0, 0.0)].into_iter().collect();
+        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
         let camera = Camera {
             yaw: 0.0,
             pitch: 0.0,
@@ -1051,12 +826,10 @@ mod tests {
     fn pick_atom_prefers_the_front_atom_on_overlap() {
         // Two atoms at the same projected (x, y) but different depth; the one
         // nearer the viewer (smaller projected z) must win.
-        let molecule = Molecule {
-            atoms: vec![atom(0.0, 0.0, 2.0), atom(0.0, 0.0, -2.0)],
-            bonds: vec![],
-            radius: 2.0,
-        };
-        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius, 1.0);
+        let molecule: Molecule = vec![atom(0.0, 0.0, 2.0), atom(0.0, 0.0, -2.0)]
+            .into_iter()
+            .collect();
+        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
         let camera = Camera {
             yaw: 0.0,
             pitch: 0.0,
@@ -1163,33 +936,5 @@ mod tests {
         let mol = Molecule::from_atoms_with_bonds(atoms, [(0, 1), (1, 2)]);
 
         assert_eq!(mol.bonds(), vec![Bond::new(0, 1), Bond::new(1, 2)]);
-    }
-
-    #[test]
-    fn molecule_has_properties() {
-        let mol = create_molecule();
-
-        assert_eq!(
-            mol.atoms(),
-            &vec![
-                Atom::new(Element::C, [1.0, 0.0, 0.0]),
-                Atom::new(Element::C, [0.0, 1.0, 0.0]),
-                Atom::new(Element::C, [-1.0, 0.0, 0.0]),
-                Atom::new(Element::C, [0.0, -1.0, 0.0]),
-            ]
-        );
-
-        assert_eq!(mol.radius(), 1.0);
-
-        assert_eq!(
-            mol.bonds(),
-            vec![
-                Bond::new(0, 1),
-                Bond::new(0, 3),
-                Bond::new(1, 2),
-                Bond::new(2, 3),
-            ],
-            "molecule had unexpected bonds"
-        );
     }
 }
