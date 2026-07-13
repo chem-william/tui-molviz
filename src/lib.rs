@@ -68,6 +68,21 @@ impl Camera {
     pub fn zoom_by(&mut self, factor: f64) {
         self.zoom = (self.zoom * factor).clamp(0.1, 100.0);
     }
+
+    /// Orthographic projection of a world point under the camera. Rotates by yaw
+    /// (about vertical Y) then pitch (about horizontal X); the projected (x, y) are
+    /// the screen plane and the surviving z is the depth used for shading/occlusion.
+    #[must_use]
+    pub fn project_point(self, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+        let (sy, cy) = self.yaw.sin_cos();
+        let (sp, cp) = self.pitch.sin_cos();
+
+        let x1 = x * cy + z * sy;
+        let z1 = -x * sy + z * cy;
+        let y2 = y * cp - z1 * sp;
+        let z2 = y * sp + z1 * cp;
+        (x1, y2, z2)
+    }
 }
 
 #[must_use]
@@ -77,21 +92,6 @@ pub fn cpk(elem: Element) -> CpkColor {
         g: 110,
         b: 180,
     })
-}
-
-/// Orthographic projection of a world point under the camera. Rotates by yaw
-/// (about vertical Y) then pitch (about horizontal X); the projected (x, y) are
-/// the screen plane and the surviving z is the depth used for shading/occlusion.
-#[must_use]
-pub fn project_point(camera: Camera, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
-    let (sy, cy) = camera.yaw.sin_cos();
-    let (sp, cp) = camera.pitch.sin_cos();
-
-    let x1 = x * cy + z * sy;
-    let z1 = -x * sy + z * cy;
-    let y2 = y * cp - z1 * sp;
-    let z2 = y * sp + z1 * cp;
-    (x1, y2, z2)
 }
 
 /// The braille canvas a molecule is drawn on: the screen rect inside the block
@@ -159,8 +159,7 @@ impl MoleculeCanvas {
             .iter()
             .enumerate()
             .filter_map(|(i, atom)| {
-                let p = project_point(
-                    camera,
+                let p = camera.project_point(
                     atom.position()[0],
                     atom.position()[1],
                     atom.position()[2],
@@ -597,8 +596,7 @@ impl MolecularVisualizer<'_> {
             .atoms
             .iter()
             .map(|atom| {
-                project_point(
-                    self.camera,
+                self.camera.project_point(
                     atom.position()[0],
                     atom.position()[1],
                     atom.position()[2],
