@@ -226,7 +226,7 @@ impl Atom {
         self.covalent_radius
     }
 
-    fn bond_radius(elem: mendeleev::Element) -> f64 {
+    fn bond_radius(elem: Element) -> f64 {
         elem.atomic_radius()
             .unwrap_or_else(|| Picometer(f64::from(elem.atomic_number()) * 10.0))
             .0
@@ -572,7 +572,7 @@ impl MolecularVisualizer<'_> {
     /// symbol drawn in its CPK color), so the structure is readable without already
     /// knowing the palette. Empty when the molecule has no atoms.
     fn draw_molecule_legend(&self) -> Line<'static> {
-        let mut seen: Vec<mendeleev::Element> = Vec::new();
+        let mut seen: Vec<Element> = Vec::new();
         for atom in &self.molecule.atoms {
             if !seen.contains(&atom.element) {
                 seen.push(atom.element);
@@ -774,10 +774,10 @@ mod tests {
 
     fn create_molecule() -> Molecule {
         let atoms = vec![
-            Atom::new(mendeleev::Element::C, [1.0, 0.0, 0.0]),
-            Atom::new(mendeleev::Element::C, [0.0, 1.0, 0.0]),
-            Atom::new(mendeleev::Element::C, [-1.0, 0.0, 0.0]),
-            Atom::new(mendeleev::Element::C, [0.0, -1.0, 0.0]),
+            Atom::new(Element::C, [1.0, 0.0, 0.0]),
+            Atom::new(Element::C, [0.0, 1.0, 0.0]),
+            Atom::new(Element::C, [-1.0, 0.0, 0.0]),
+            Atom::new(Element::C, [0.0, -1.0, 0.0]),
         ];
         atoms.into_iter().collect()
     }
@@ -950,7 +950,7 @@ mod tests {
 
     #[test]
     fn atoms_have_color() {
-        let atoms = vec![Atom::new(mendeleev::Element::N, [0.0, 0.0, 0.0])];
+        let atoms = vec![Atom::new(Element::N, [0.0, 0.0, 0.0])];
         let molecule = Molecule {
             atoms,
             bonds: Vec::new(),
@@ -1010,7 +1010,7 @@ mod tests {
     }
 
     fn atom(x: f64, y: f64, z: f64) -> Atom {
-        Atom::new(mendeleev::Element::C, [x, y, z])
+        Atom::new(Element::C, [x, y, z])
     }
 
     #[test]
