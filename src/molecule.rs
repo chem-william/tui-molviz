@@ -1,3 +1,4 @@
+pub use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
 
@@ -16,6 +17,15 @@ impl Atom {
             position,
             covalent_radius: Self::bond_radius(element),
         }
+    }
+
+    #[must_use]
+    pub fn cpk(&self) -> CpkColor {
+        self.element.cpk_color().unwrap_or(CpkColor {
+            r: 255,
+            g: 110,
+            b: 180,
+        })
     }
 
     #[must_use]

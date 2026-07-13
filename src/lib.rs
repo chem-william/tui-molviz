@@ -25,7 +25,10 @@
 
 pub mod camera;
 pub mod molecule;
+use std::collections::HashSet;
+
 use crate::camera::Camera;
+use crate::molecule::Atom;
 use crate::molecule::Molecule;
 
 pub use mendeleev::Color as CpkColor;
@@ -40,15 +43,6 @@ use ratatui::{
         canvas::{Canvas, Line as CanvasLine, Points},
     },
 };
-
-#[must_use]
-pub fn cpk(elem: Element) -> CpkColor {
-    elem.cpk_color().unwrap_or(CpkColor {
-        r: 255,
-        g: 110,
-        b: 180,
-    })
-}
 
 /// The braille canvas a molecule is drawn on: the screen rect inside the block
 /// border, the world-space half-extents the canvas is bounded to (`bx`/`by`),
@@ -339,14 +333,18 @@ impl MolecularVisualizer<'_> {
         canvas: &MoleculeCanvas,
     ) -> Option<(Vec<(f64, f64)>, ratatui::style::Color)> {
         let i = self.highlight.filter(|&i| i < proj.len())?;
-        let color = self.highlight_style?.fg.unwrap_or(Self::DEFAULT_HIGHLIGHT_COLOR);
+        let color = self
+            .highlight_style?
+            .fg
+            .unwrap_or(Self::DEFAULT_HIGHLIGHT_COLOR);
 
         let dot = 1.0 / canvas.dpu; // one braille dot, in world units
         let r_dots = canvas.atom_radius_dots(self.molecule.atoms()[i].covalent_radius());
         let r_ring = (r_dots + Self::HIGHLIGHT_RING_GAP_DOTS) * dot;
         let pts = (0..Self::HIGHLIGHT_RING_STEPS)
             .map(|k| {
-                let theta = std::f64::consts::TAU * f64::from(k) / f64::from(Self::HIGHLIGHT_RING_STEPS);
+                let theta =
+                    std::f64::consts::TAU * f64::from(k) / f64::from(Self::HIGHLIGHT_RING_STEPS);
                 let (s, c) = theta.sin_cos();
                 (proj[i].0 + r_ring * c, proj[i].1 + r_ring * s)
             })
@@ -358,19 +356,16 @@ impl MolecularVisualizer<'_> {
     /// symbol drawn in its CPK color), so the structure is readable without already
     /// knowing the palette. Empty when the molecule has no atoms.
     fn draw_molecule_legend(&self) -> Line<'static> {
-        let mut seen: Vec<Element> = Vec::new();
-        for atom in self.molecule.atoms() {
-            if !seen.contains(&atom.element()) {
-                seen.push(atom.element());
-            }
-        }
-
-        let spans = seen
-            .into_iter()
-            .map(|elem| {
-                let c = cpk(elem);
+        let mut seen = HashSet::new();
+        let spans = self
+            .molecule
+            .atoms()
+            .iter()
+            .filter(|atom| seen.insert(atom.element()))
+            .map(|atom| {
+                let c = atom.cpk();
                 Span::styled(
-                    format!(" {} ", elem.symbol()),
+                    format!(" {} ", atom.element().symbol()),
                     Style::default()
                         .fg(ratatui::style::Color::Rgb(c.r, c.g, c.b))
                         .bold(),
@@ -493,7 +488,7 @@ impl MolecularVisualizer<'_> {
         let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
         for i in order {
             let atom = &self.molecule.atoms()[i];
-            let color = Self::shade(&cpk(atom.element()), depth(proj_depths[i]));
+            let color = Self::shade(&atom.cpk(), depth(proj_depths[i]));
             if groups.last().map(|(c, _)| *c) != Some(color) {
                 groups.push((color, Vec::new()));
             }
