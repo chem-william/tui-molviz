@@ -757,8 +757,8 @@ mod tests {
 
     #[test]
     fn empty_mol_draws_empty_canvas() {
-        let mol = Molecule::from_atoms(Vec::new());
-        let viz = MolecularVisualizer::new(&mol).show_bonds(true);
+        let empty_mol = Molecule::from_atoms(Vec::new());
+        let viz = MolecularVisualizer::new(&empty_mol).show_bonds(true);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -829,8 +829,8 @@ mod tests {
 
     #[test]
     fn setting_style_changes_border() {
-        let mol = Molecule::from_atoms(Vec::new());
-        let viz = MolecularVisualizer::new(&mol)
+        let empty_mol = Molecule::from_atoms(Vec::new());
+        let viz = MolecularVisualizer::new(&empty_mol)
             .show_bonds(false)
             .style(Style::new().red())
             .block(Block::bordered())
