@@ -231,14 +231,22 @@ impl Atom {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Bond {
-    pub start: usize,
-    pub end: usize,
+    start: usize,
+    end: usize,
 }
 
 impl Bond {
     #[must_use]
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
+    }
+
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    pub fn end(&self) -> usize {
+        self.end
     }
 }
 
