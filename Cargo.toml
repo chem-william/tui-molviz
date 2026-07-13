@@ -7,6 +7,7 @@ readme = "README.md"
 repository = "https://github.com/chem-william/tui-molviz"
 license = "MIT"
 keywords = ["ratatui", "chemistry"]
+categories = ["science", "command-line-utilities"]
 
 [dependencies]
 mendeleev = "0.8.4"
