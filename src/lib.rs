@@ -255,6 +255,27 @@ impl From<(usize, usize)> for Bond {
     }
 }
 
+/// A bond referenced an atom index outside the molecule's atom list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidBondError {
+    pub bond: Bond,
+    pub atom_count: usize,
+}
+
+impl std::fmt::Display for InvalidBondError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "bond ({}, {}) references an atom outside the {}-atom molecule",
+            self.bond.start(),
+            self.bond.end(),
+            self.atom_count
+        )
+    }
+}
+
+impl std::error::Error for InvalidBondError {}
+
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 pub struct Molecule {
     atoms: Vec<Atom>,
@@ -333,26 +354,39 @@ impl Molecule {
         atoms: impl IntoIterator<Item = Atom>,
         bonds: impl IntoIterator<Item = impl Into<Bond>>,
     ) -> Self {
+        match Self::try_from_atoms_with_bonds(atoms, bonds) {
+            Ok(molecule) => molecule,
+            Err(err) => panic!("{err}"),
+        }
+    }
+
+    /// Fallible version of [`Molecule::from_atoms_with_bonds`], for bonds
+    /// coming from untrusted input (e.g. a parsed file) rather than
+    /// hand-written call sites.
+    pub fn try_from_atoms_with_bonds(
+        atoms: impl IntoIterator<Item = Atom>,
+        bonds: impl IntoIterator<Item = impl Into<Bond>>,
+    ) -> Result<Self, InvalidBondError> {
         let mut atoms: Vec<_> = atoms.into_iter().collect();
         let bonds: Vec<_> = bonds.into_iter().map(Into::into).collect();
 
-        for bond in &bonds {
-            assert!(
-                bond.start < atoms.len() && bond.end < atoms.len(),
-                "bond ({}, {}) references an atom outside the {}-atom molecule",
-                bond.start,
-                bond.end,
-                atoms.len()
-            );
+        if let Some(&bond) = bonds
+            .iter()
+            .find(|bond| bond.start >= atoms.len() || bond.end >= atoms.len())
+        {
+            return Err(InvalidBondError {
+                bond,
+                atom_count: atoms.len(),
+            });
         }
 
         Self::recenter(&mut atoms);
         let radius = Self::bounding_radius(&atoms);
-        Molecule {
+        Ok(Molecule {
             atoms,
             bonds,
             radius,
-        }
+        })
     }
 
     #[must_use]
