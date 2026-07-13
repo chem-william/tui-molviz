@@ -1,8 +1,15 @@
+use std::io::stdout;
 use std::time::{Duration, Instant};
 
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
+    crossterm::{
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
+            MouseButton, MouseEventKind,
+        },
+        execute,
+    },
     layout::{Constraint, Layout},
     style::{Color, Style},
     text::Line,
@@ -10,7 +17,7 @@ use ratatui::{
 };
 use tui_molviz::camera::Camera;
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{Element, MolecularVisualizer};
+use tui_molviz::{Element, MolecularVisualizer, MolecularVisualizerState};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -25,6 +32,10 @@ struct App {
     auto_spin: bool,
     last_tick: Instant,
     should_quit: bool,
+    /// Atom the user last clicked, highlighted in the view.
+    selected: Option<usize>,
+    /// Canvas mapping from the last render, used to hit-test mouse clicks.
+    viz_state: MolecularVisualizerState,
 }
 
 impl App {
@@ -35,35 +46,57 @@ impl App {
             auto_spin: true,
             last_tick: Instant::now(),
             should_quit: false,
+            selected: None,
+            viz_state: MolecularVisualizerState::default(),
         }
     }
 
     fn run(&mut self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
-        while !self.should_quit {
-            self.tick();
-            terminal.draw(|frame| self.render(frame))?;
-            self.handle_events()?;
-        }
+        // Mouse capture isn't part of ratatui's default terminal setup, so the
+        // example opts in (and out) itself.
+        execute!(stdout(), EnableMouseCapture)?;
 
-        Ok(())
+        let result = (|| {
+            while !self.should_quit {
+                self.tick();
+                terminal.draw(|frame| self.render(frame))?;
+                self.handle_events()?;
+            }
+            Ok(())
+        })();
+
+        execute!(stdout(), DisableMouseCapture)?;
+        result
     }
 
-    fn render(&self, frame: &mut Frame<'_>) {
+    fn render(&mut self, frame: &mut Frame<'_>) {
         let [molecule_area, controls_area] =
             Layout::vertical([Constraint::Min(8), Constraint::Length(3)]).areas(frame.area());
 
         let visualizer = MolecularVisualizer::new(&self.molecule)
             .camera(self.camera)
+            .highlight(self.selected)
             .block(Block::bordered().title("tui-molviz showcase"))
             .style(Style::default().bg(Color::Black));
 
-        frame.render_widget(visualizer, molecule_area);
+        // Rendering statefully hands back the canvas mapping in `viz_state`,
+        // which `handle_events` reads to turn a click into an atom index.
+        frame.render_stateful_widget(&visualizer, molecule_area, &mut self.viz_state);
 
         let spin = if self.auto_spin { "on" } else { "off" };
+        let selected = match self.selected {
+            Some(i) => {
+                let atom = &self.molecule.atoms()[i];
+                format!("{} (#{i})", atom.element().symbol())
+            }
+            None => "none".to_string(),
+        };
         let controls = Paragraph::new(vec![
-            Line::from("arrows rotate   + zoom in   - zoom out   r reset   space spin   q quit"),
+            Line::from(
+                "arrows rotate   + zoom in   - zoom out   r reset   space spin   click select   q quit",
+            ),
             Line::from(format!(
-                "yaw {:+.2}   pitch {:+.2}   zoom {:.2}   spin {spin}",
+                "yaw {:+.2}   pitch {:+.2}   zoom {:.2}   spin {spin}   selected {selected}",
                 self.camera.yaw, self.camera.pitch, self.camera.zoom
             )),
         ])
@@ -86,15 +119,19 @@ impl App {
             return Ok(());
         }
 
-        let Event::Key(key) = event::read()? else {
-            return Ok(());
-        };
-
-        if key.kind != KeyEventKind::Press {
-            return Ok(());
+        match event::read()? {
+            Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key.code),
+            Event::Mouse(mouse) if mouse.kind == MouseEventKind::Down(MouseButton::Left) => {
+                self.handle_click(mouse.column, mouse.row);
+            }
+            _ => {}
         }
 
-        match key.code {
+        Ok(())
+    }
+
+    fn handle_key(&mut self, code: KeyCode) {
+        match code {
             KeyCode::Esc | KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Left => self.camera.rotate(-0.12, 0.0),
             KeyCode::Right => self.camera.rotate(0.12, 0.0),
@@ -106,8 +143,17 @@ impl App {
             KeyCode::Char(' ') => self.auto_spin = !self.auto_spin,
             _ => {}
         }
+    }
 
-        Ok(())
+    /// Turn a terminal cell (from any source — here a left click) into an atom
+    /// selection. `pick_atom` only needs the raw column/row and the same camera
+    /// the last frame was drawn with, so the widget stays event-source agnostic.
+    fn handle_click(&mut self, col: u16, row: u16) {
+        if let Some(canvas) = self.viz_state.canvas {
+            let hit = canvas.pick_atom(self.camera, &self.molecule, col, row);
+            // A click on empty space clears the selection.
+            self.selected = hit;
+        }
     }
 }
 
