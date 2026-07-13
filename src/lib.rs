@@ -108,6 +108,13 @@ pub struct MoleculeCanvas {
 }
 
 impl MoleculeCanvas {
+    /// Headroom so the molecule's bounding sphere doesn't touch the canvas edge.
+    const EDGE_PADDING: f64 = 1.15;
+    /// Atom disk radius, in braille dots, as a fraction of covalent radius.
+    const ATOM_RADIUS_SCALE: f64 = 0.55;
+    const MIN_ATOM_RADIUS_DOTS: f64 = 1.5;
+    const MAX_ATOM_RADIUS_DOTS: f64 = 5.0;
+
     #[must_use]
     pub fn contains_cell(&self, col: u16, row: u16) -> bool {
         self.inner.contains(Position { x: col, y: row })
@@ -119,7 +126,7 @@ impl MoleculeCanvas {
         let w = f64::from(inner.width.max(1));
         let h = f64::from(inner.height.max(1));
         let (rx, ry) = (2.0 * w, 4.0 * h);
-        let by = (radius * 1.15) / zoom;
+        let by = (radius * Self::EDGE_PADDING) / zoom;
         let bx = by * (rx / ry);
         let dpu = ry / (2.0 * by);
         Self { inner, bx, by, dpu }
@@ -127,7 +134,8 @@ impl MoleculeCanvas {
 
     /// Drawn radius of an atom, in braille dots.
     fn atom_radius_dots(&self, cov: f64) -> f64 {
-        (cov * 0.55 * self.dpu).clamp(1.5, 5.0)
+        (cov * Self::ATOM_RADIUS_SCALE * self.dpu)
+            .clamp(Self::MIN_ATOM_RADIUS_DOTS, Self::MAX_ATOM_RADIUS_DOTS)
     }
 
     /// Inverse of the canvas mapping: the atom whose drawn disk a clicked
@@ -160,11 +168,8 @@ impl MoleculeCanvas {
             .iter()
             .enumerate()
             .filter_map(|(i, atom)| {
-                let p = camera.project_point(
-                    atom.position()[0],
-                    atom.position()[1],
-                    atom.position()[2],
-                );
+                let [x, y, z] = atom.position();
+                let p = camera.project_point(x, y, z);
                 let d2 = (p.0 - px).powi(2) + (p.1 - py).powi(2);
                 let r_world = self.atom_radius_dots(atom.covalent_radius()) / self.dpu;
                 // On overlap, prefer the front-most atom (largest -z).
@@ -276,6 +281,13 @@ pub struct Molecule {
 }
 
 impl Molecule {
+    /// Below this separation (Å), atoms are treated as coincident (e.g.
+    /// duplicate input) rather than bonded.
+    const MIN_BOND_DISTANCE: f64 = 0.4;
+    /// A bond is perceived when interatomic distance is within this multiple
+    /// of the atoms' summed covalent radii.
+    const BOND_DISTANCE_TOLERANCE: f64 = 1.3;
+
     fn perceive_bonds(atoms: &[Atom]) -> Vec<Bond> {
         let mut bonds = Vec::new();
         for i in 0..atoms.len() {
@@ -285,7 +297,9 @@ impl Molecule {
                     + (a.position()[1] - b.position()[1]).powi(2)
                     + (a.position()[2] - b.position()[2]).powi(2))
                 .sqrt();
-                if d > 0.4 && d <= (a.covalent_radius() + b.covalent_radius()) * 1.3 {
+                let bond_cutoff =
+                    (a.covalent_radius() + b.covalent_radius()) * Self::BOND_DISTANCE_TOLERANCE;
+                if d > Self::MIN_BOND_DISTANCE && d <= bond_cutoff {
                     bonds.push(Bond { start: i, end: j });
                 }
             }
@@ -541,6 +555,19 @@ impl StatefulWidget for &MolecularVisualizer<'_> {
 }
 
 impl MolecularVisualizer<'_> {
+    /// Depth factor floor; the farthest atom is dimmed to this fraction of
+    /// full brightness rather than to black.
+    const MIN_DEPTH_BRIGHTNESS: f64 = 0.4;
+    const DEPTH_BRIGHTNESS_RANGE: f64 = 1.0 - Self::MIN_DEPTH_BRIGHTNESS;
+    /// Number of distinct brightness steps `shade` quantizes to.
+    const SHADE_LEVELS: f64 = 5.0;
+    /// Uniform gray used for bonds, independent of the bonded atoms' CPK colors.
+    const BOND_COLOR: CpkColor = CpkColor {
+        r: 120,
+        g: 120,
+        b: 120,
+    };
+
     /// A color key for the elements actually in the molecule (each element's
     /// symbol drawn in its CPK color), so the structure is readable without already
     /// knowing the palette. Empty when the molecule has no atoms.
@@ -572,7 +599,7 @@ impl MolecularVisualizer<'_> {
     }
 
     fn depth_factor(z: f64, zmin: f64, zspan: f64) -> f64 {
-        0.4 + 0.6 * ((z - zmin) / zspan)
+        Self::MIN_DEPTH_BRIGHTNESS + Self::DEPTH_BRIGHTNESS_RANGE * ((z - zmin) / zspan)
     }
 
     fn back_to_front_order(depths: &[f64]) -> Vec<usize> {
@@ -586,7 +613,7 @@ impl MolecularVisualizer<'_> {
     /// color escapes. Only the dimming is stepped, not the hue.
     #[must_use]
     pub fn shade(color: &CpkColor, f: f64) -> ratatui::style::Color {
-        let f = (f.clamp(0.0, 1.0) * 5.0).round() / 5.0;
+        let f = (f.clamp(0.0, 1.0) * Self::SHADE_LEVELS).round() / Self::SHADE_LEVELS;
         ratatui::style::Color::Rgb(
             (f64::from(color.r) * f) as u8,
             (f64::from(color.g) * f) as u8,
@@ -629,11 +656,8 @@ impl MolecularVisualizer<'_> {
             .atoms
             .iter()
             .map(|atom| {
-                self.camera.project_point(
-                    atom.position()[0],
-                    atom.position()[1],
-                    atom.position()[2],
-                )
+                let [x, y, z] = atom.position();
+                self.camera.project_point(x, y, z)
             })
             .collect();
 
@@ -654,11 +678,7 @@ impl MolecularVisualizer<'_> {
                 .iter()
                 .map(|&bond| {
                     let color = Self::shade(
-                        &mendeleev::Color {
-                            r: 120,
-                            g: 120,
-                            b: 120,
-                        },
+                        &Self::BOND_COLOR,
                         depth(f64::midpoint(
                             proj_depths[bond.start],
                             proj_depths[bond.end],
