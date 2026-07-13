@@ -371,6 +371,13 @@ impl Molecule {
     }
 }
 
+impl FromIterator<Atom> for Molecule {
+    /// Bonds are perceived from interatomic distances, same as [`Molecule::from_atoms`].
+    fn from_iter<T: IntoIterator<Item = Atom>>(iter: T) -> Self {
+        Self::from_atoms(iter)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MolecularVisualizer<'a> {
     /// The molecule to visualize
@@ -726,7 +733,7 @@ mod tests {
             Atom::new(mendeleev::Element::C, [-1.0, 0.0, 0.0]),
             Atom::new(mendeleev::Element::C, [0.0, -1.0, 0.0]),
         ];
-        Molecule::from_atoms(atoms)
+        atoms.into_iter().collect()
     }
 
     #[test]
