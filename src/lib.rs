@@ -28,7 +28,6 @@ pub mod molecule;
 use std::collections::HashSet;
 
 use crate::camera::Camera;
-use crate::molecule::Atom;
 use crate::molecule::Molecule;
 
 pub use mendeleev::Color as CpkColor;
