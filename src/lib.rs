@@ -120,8 +120,8 @@ impl MoleculeCanvas {
                 let p = camera.project_point(x, y, z);
                 let d2 = (p.0 - px).powi(2) + (p.1 - py).powi(2);
                 let r_world = self.atom_radius_dots(atom.covalent_radius()) / self.dpu;
-                // On overlap, prefer the front-most atom (largest -z).
-                (d2 <= r_world * r_world).then_some((i, -p.2))
+                // On overlap, prefer the front-most atom (largest projected z).
+                (d2 <= r_world * r_world).then_some((i, p.2))
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i)
@@ -375,7 +375,7 @@ impl MolecularVisualizer<'_> {
     }
 
     fn visible_depth(projected_z: f64) -> f64 {
-        -projected_z
+        projected_z
     }
 
     fn depth_factor(z: f64, zmin: f64, zspan: f64) -> f64 {
@@ -646,14 +646,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│       ⢿⣿⣿⣿⡀      │".to_string(),
-            "│      ⡰⠁ ⠁ ⠈⠢⡀  ⡀ │".to_string(),
-            "│    ⢀⠎       ⠈⣾⣿⣿⣿│".to_string(),
-            "│⣀⣀⣀⡰⠁        ⠈⣿⣿⣿⣿│".to_string(),
-            "│⣿⣿⣿⣿⡀        ⢀⠎⠉⠉⠉│".to_string(),
-            "│⣿⣿⣿⡿⡀       ⡰⠁    │".to_string(),
-            "│ ⠈  ⠈⠢⡀  ⡀⢀⠎      │".to_string(),
-            "│      ⠈⣿⣿⣿⣷       │".to_string(),
+            "│      ⢀⣿⣿⣿⡿       │".to_string(),
+            "│ ⢀  ⢀⠔⠁  ⠁⠈⢆      │".to_string(),
+            "│⣿⣿⣿⣷⠁       ⠱⡀    │".to_string(),
+            "│⣿⣿⣿⣿⠁        ⠈⢆⣀⣀⣀│".to_string(),
+            "│⠉⠉⠉⠱⡀        ⢀⣿⣿⣿⣿│".to_string(),
+            "│    ⠈⢆       ⢀⢿⣿⣿⣿│".to_string(),
+            "│      ⠱⡀ ⡀ ⢀⠔⠁  ⠁ │".to_string(),
+            "│       ⣾⣿⣿⣿⠁      │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -698,12 +698,12 @@ mod tests {
         let expected = vec![
             "┌──────────────────┐".to_string(),
             "│       ⢿⣿⣿⡿       │".to_string(),
-            "│         ⠁      ⡀ │".to_string(),
-            "│              ⣾⣿⣿⣿│".to_string(),
-            "│⣀⣀⣀⡀         ⠈⣿⣿⣿⣿│".to_string(),
-            "│⣿⣿⣿⣿⡀         ⠈⠉⠉⠉│".to_string(),
-            "│⣿⣿⣿⡿              │".to_string(),
-            "│ ⠈       ⡀        │".to_string(),
+            "│ ⢀       ⠁        │".to_string(),
+            "│⣿⣿⣿⣷              │".to_string(),
+            "│⣿⣿⣿⣿⠁         ⢀⣀⣀⣀│".to_string(),
+            "│⠉⠉⠉⠁         ⢀⣿⣿⣿⣿│".to_string(),
+            "│              ⢿⣿⣿⣿│".to_string(),
+            "│         ⡀      ⠁ │".to_string(),
             "│       ⣾⣿⣿⣷       │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
@@ -724,9 +724,9 @@ mod tests {
 
         let expected = vec![
             "┌────────┐".to_string(),
-            "│   ⠲⠖⢀⣤⣄│".to_string(),
-            "│⣴⣶⡄  ⠘⠿⠟│".to_string(),
-            "│⠙⠛⠁⠴⠦   │".to_string(),
+            "│⣠⣤⡀⠲⠖   │".to_string(),
+            "│⠻⠿⠃  ⢠⣶⣦│".to_string(),
+            "│   ⠴⠦⠈⠛⠋│".to_string(),
             "└────────┘".to_string(),
         ];
         assert_eq!(buffer_lines(&buffer), expected);
@@ -771,9 +771,9 @@ mod tests {
 
         let expected = vec![
             "┌user────┐".to_string(),
-            "│   ⠲⠖⢀⣤⣄│".to_string(),
-            "│⣴⣶⡄  ⠘⠿⠟│".to_string(),
-            "│⠙⠛⠁⠴⠦   │".to_string(),
+            "│⣠⣤⡀⠲⠖   │".to_string(),
+            "│⠻⠿⠃  ⢠⣶⣦│".to_string(),
+            "│   ⠴⠦⠈⠛⠋│".to_string(),
             "└── C ───┘".to_string(),
         ];
         assert_eq!(buffer_lines(&buffer), expected);
@@ -855,7 +855,7 @@ mod tests {
             MolecularVisualizer::visible_depth(0.0),
         ];
 
-        assert_eq!(MolecularVisualizer::back_to_front_order(&depths), [1, 2, 0]);
+        assert_eq!(MolecularVisualizer::back_to_front_order(&depths), [0, 2, 1]);
     }
 
     #[test]
@@ -903,7 +903,7 @@ mod tests {
     #[test]
     fn pick_atom_prefers_the_front_atom_on_overlap() {
         // Two atoms at the same projected (x, y) but different depth; the one
-        // nearer the viewer (smaller projected z) must win.
+        // nearer the viewer (larger projected z) must win.
         let molecule: Molecule = vec![atom(0.0, 0.0, 2.0), atom(0.0, 0.0, -2.0)]
             .into_iter()
             .collect();
@@ -914,7 +914,7 @@ mod tests {
             zoom: 1.0,
         };
 
-        assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(1));
+        assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(0));
     }
 
     const CAMERA_ROTATION_STEP: f64 = 0.12;
@@ -932,14 +932,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│ ⢀⠎               │".to_string(),
-            "│⡰⠁                │".to_string(),
+            "│               ⠱⡀ │".to_string(),
+            "│                ⠈⢆│".to_string(),
             "│                  │".to_string(),
             "│                  │".to_string(),
             "│                  │".to_string(),
             "│                  │".to_string(),
-            "│                ⢀⠎│".to_string(),
-            "│               ⡰⠁ │".to_string(),
+            "│⠱⡀                │".to_string(),
+            "│ ⠈⢆               │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -961,12 +961,12 @@ mod tests {
         let expected = vec![
             "┌──────────────────┐".to_string(),
             "│       ⢶⣾⣷⡶       │".to_string(),
-            "│    ⢀⣤⣴⣼⣄⢹        │".to_string(),
-            "│    ⢼⣿⣿⣿⣿⠄⡇       │".to_string(),
-            "│    ⠘⠿⢿⡿⠟ ⢣       │".to_string(),
-            "│       ⢣ ⣴⣾⣷⣶⡄    │".to_string(),
-            "│       ⢸⠐⣿⣿⣿⣿⡗    │".to_string(),
-            "│        ⡇⡙⡟⠟⠛⠁    │".to_string(),
+            "│        ⡇⣡⣧⣦⣤⡀    │".to_string(),
+            "│       ⢸⠠⣿⣿⣿⣿⡧    │".to_string(),
+            "│       ⡜ ⠻⢿⡿⠿⠃    │".to_string(),
+            "│    ⢠⣶⣾⣷⣦ ⡜       │".to_string(),
+            "│    ⢺⣿⣿⣿⣿⠂⡇       │".to_string(),
+            "│    ⠈⠛⠻⢻⠋⣸        │".to_string(),
             "│       ⠾⢿⡿⠷       │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
@@ -990,14 +990,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│       ⢿⣿⣿⣿⡀      │".to_string(),
-            "│      ⡰⠁ ⠁ ⠈⠢⡀  ⡀ │".to_string(),
-            "│    ⢀⠎       ⠈⣾⣿⣿⣿│".to_string(),
-            "│⣀⣀⣀⡰⠁        ⠈⣿⣿⣿⣿│".to_string(),
-            "│⣿⣿⣿⣿⡀        ⢀⠎⠉⠉⠉│".to_string(),
-            "│⣿⣿⣿⡿⡀       ⡰⠁    │".to_string(),
-            "│ ⠈  ⠈⠢⡀  ⡀⢀⠎      │".to_string(),
-            "│      ⠈⣿⣿⣿⣷       │".to_string(),
+            "│      ⢀⣿⣿⣿⡿       │".to_string(),
+            "│ ⢀  ⢀⠔⠁  ⠁⠈⢆      │".to_string(),
+            "│⣿⣿⣿⣷⠁       ⠱⡀    │".to_string(),
+            "│⣿⣿⣿⣿⠁        ⠈⢆⣀⣀⣀│".to_string(),
+            "│⠉⠉⠉⠱⡀        ⢀⣿⣿⣿⣿│".to_string(),
+            "│    ⠈⢆       ⢀⢿⣿⣿⣿│".to_string(),
+            "│      ⠱⡀ ⡀ ⢀⠔⠁  ⠁ │".to_string(),
+            "│       ⣾⣿⣿⣿⠁      │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 

@@ -38,8 +38,8 @@ impl Camera {
         let (sy, cy) = self.yaw.sin_cos();
         let (sp, cp) = self.pitch.sin_cos();
 
-        let x1 = x * cy + z * sy;
-        let z1 = -x * sy + z * cy;
+        let x1 = x * cy - z * sy;
+        let z1 = x * sy + z * cy;
         let y2 = y * cp - z1 * sp;
         let z2 = y * sp + z1 * cp;
         (x1, y2, z2)
