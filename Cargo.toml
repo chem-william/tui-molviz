@@ -8,6 +8,7 @@ repository = "https://github.com/chem-william/tui-molviz"
 license = "MIT"
 keywords = ["ratatui", "chemistry"]
 categories = ["science", "command-line-utilities"]
+exclude = [".github/", "assets/", ".gitignore"]
 
 [dependencies]
 mendeleev = "0.8.4"
