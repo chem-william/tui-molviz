@@ -242,7 +242,7 @@ impl<'a> MolecularVisualizer<'a> {
 
     /// Sets the base style of the widget.
     ///
-    /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
+    /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], or
     /// your own type that implements [`Into<Style>`]).
     ///
     /// This is a fluent setter method which must be chained or used as it consumes self
