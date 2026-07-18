@@ -23,7 +23,8 @@ Ratatui:
 ```rust
 use mendeleev::Element;
 use ratatui::{Frame, widgets::Block};
-use tui_molviz::{Atom, MolecularVisualizer, Molecule};
+use tui_molviz::molecule::{Atom, Molecule};
+use tui_molviz::MolecularVisualizer;
 
 fn render(frame: &mut Frame<'_>) {
     let water = Molecule::from_atoms([

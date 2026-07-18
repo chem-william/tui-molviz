@@ -5,14 +5,23 @@
 //!
 //! # Quick start
 //! ```rust,no_run
-//! use ratatui::crossterm::event;
 //! use ratatui::Frame;
+//! use ratatui::crossterm::event;
+//! use ratatui::widgets::Block;
+//! use tui_molviz::molecule::{Atom, Molecule};
+//! use tui_molviz::{Element, MolecularVisualizer};
 //!
 //! fn main() -> color_eyre::Result<()> {
 //!     color_eyre::install()?;
 //!
+//!     let water = Molecule::from_atoms([
+//!         Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+//!         Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+//!         Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+//!     ]);
+//!
 //!     ratatui::run(|terminal| loop {
-//!         terminal.draw(render)?;
+//!         terminal.draw(|frame| render(frame, &water))?;
 //!
 //!         if event::read()?.is_key_press() {
 //!             break Ok(());
@@ -20,7 +29,10 @@
 //!     })
 //! }
 //!
-//! fn render(frame: &mut Frame<'_>) {}
+//! fn render(frame: &mut Frame<'_>, water: &Molecule) {
+//!     let widget = MolecularVisualizer::new(water).block(Block::bordered().title("Water"));
+//!     frame.render_widget(widget, frame.area());
+//! }
 //! ```
 
 pub mod camera;
