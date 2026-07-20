@@ -1,5 +1,6 @@
-[![Codecov](https://codecov.io/github/chem-william/tui-molviz/coverage.svg?branch=main)](https://codecov.io/gh/chem-william/tui-molviz)
-[![dependency status](https://deps.rs/repo/github/chem-william/tui-molviz/status.svg)](https://deps.rs/repo/github/chem-william/tui-molviz)
+[![Docs Badge]][Docs]
+[![Coverage Badge]][Coverage]
+[![Dependency Badge]][Dependency Status]
 
 # tui-molviz
 
@@ -50,3 +51,10 @@ For a larger interactive example with rotation and zoom:
 ```sh
 cargo run --example showcase
 ```
+
+[Docs]: https://docs.rs/tui-molviz
+[Coverage]: https://codecov.io/gh/chem-william/tui-molviz
+[Dependency Status]: https://deps.rs/repo/github/chem-william/tui-molviz
+[Docs Badge]: https://img.shields.io/docsrs/tui-molviz?logo=rust&style=flat
+[Coverage Badge]: https://codecov.io/github/chem-william/tui-molviz/coverage.svg?branch=main
+[Dependency Badge]: https://deps.rs/repo/github/chem-william/tui-molviz/status.svg
