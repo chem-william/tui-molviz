@@ -7,6 +7,12 @@ A molecular visualizer widget for [Ratatui](https://crates.io/crates/ratatui)
 
 ![Example molecule in TUI](https://github.com/chem-william/tui-molviz/blob/main/assets/showcase.gif)
 
+## Installation
+
+```bash
+cargo add tui-molviz
+```
+
 ## Quickstart
 
 Run the minimal example:
