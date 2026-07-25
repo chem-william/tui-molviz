@@ -409,7 +409,7 @@ impl MolecularVisualizer<'_> {
     /// neighbouring cells share a color and the terminal can run-length batch the
     /// color escapes. Only the dimming is stepped, not the hue.
     #[must_use]
-    pub fn shade(color: &CpkColor, f: f64) -> ratatui::style::Color {
+    fn shade(color: &CpkColor, f: f64) -> ratatui::style::Color {
         let f = (f.clamp(0.0, 1.0) * Self::SHADE_LEVELS).round() / Self::SHADE_LEVELS;
         ratatui::style::Color::Rgb(
             (f64::from(color.r) * f) as u8,
