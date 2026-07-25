@@ -10,6 +10,7 @@ pub struct Atom {
 }
 
 impl Atom {
+    /// Creates a new `Atom` from the given [`Element`] and `position`.
     #[must_use]
     pub fn new(element: Element, position: [f64; 3]) -> Self {
         Atom {
@@ -19,6 +20,7 @@ impl Atom {
         }
     }
 
+    /// Computes the [`CpkColor`] from the [`Element`] of [`Self`].
     #[must_use]
     pub fn cpk(&self) -> CpkColor {
         self.element.cpk_color().unwrap_or(CpkColor {
@@ -64,6 +66,7 @@ pub struct Bond {
 }
 
 impl Bond {
+    /// Creates a new `Bond` that begins at `start` and ends at `end`.
     #[must_use]
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
@@ -111,6 +114,7 @@ impl Molecule {
     /// of the atoms' summed covalent radii.
     const BOND_DISTANCE_TOLERANCE: f64 = 1.3;
 
+    /// Perceives the bonds between `atoms`. Scales as O(n^2) so is computationally expensive for many atoms.
     fn perceive_bonds(atoms: &[Atom]) -> Vec<Bond> {
         let mut bonds = Vec::new();
         for i in 0..atoms.len() {
@@ -167,6 +171,8 @@ impl Molecule {
             .max(1.0)
     }
 
+    /// Creates a new [`Self`] from `atoms`.
+    ///
     /// Bonds are perceived from interatomic distances.
     #[must_use]
     pub fn from_atoms(atoms: impl IntoIterator<Item = Atom>) -> Self {
@@ -176,7 +182,12 @@ impl Molecule {
         Self::from_atoms_with_bonds(atoms, bonds)
     }
 
+    /// Creates a new [`Self`] from `atoms` and `bonds`.
+    /// This method might be preferred if bonds can be obtained from elsewhere
+    /// as perceiving bonds scales as O(n^2) which is computationally expensive for many atoms.
+    ///
     /// # Panics
+    ///
     /// If any bond references an atom index outside `atoms`.
     #[must_use]
     pub fn from_atoms_with_bonds(
@@ -190,8 +201,12 @@ impl Molecule {
     }
 
     /// Fallible version of [`Molecule::from_atoms_with_bonds`], for bonds
-    /// coming from untrusted input (e.g. a parsed file) rather than
+    /// coming from e.g. a parsed file rather than
     /// hand-written call sites.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either `bond.start >= atoms.len()` or `bond.end >= atoms.len()`.
     pub fn try_from_atoms_with_bonds(
         atoms: impl IntoIterator<Item = Atom>,
         bonds: impl IntoIterator<Item = impl Into<Bond>>,

@@ -21,8 +21,15 @@ impl Default for Camera {
 }
 
 impl Camera {
+    fn clamp_zoom(zoom: f64) -> f64 {
+        zoom.clamp(0.1, 100.0)
+    }
+
+    /// Creates a new [`Self`] where `zoom` is clamped to [0.1, 100]
+    /// and `yaw` and `pitch` has been folded in `[-PI, PI)`.
     #[must_use]
     pub fn new(yaw: f64, pitch: f64, zoom: f64) -> Self {
+        let zoom = Camera::clamp_zoom(zoom);
         Camera { yaw, pitch, zoom }
     }
 
@@ -72,7 +79,7 @@ impl Camera {
     }
 
     pub fn zoom_by(&mut self, factor: f64) {
-        self.zoom = (self.zoom * factor).clamp(0.1, 100.0);
+        self.zoom = Camera::clamp_zoom(self.zoom * factor);
     }
 
     /// Orthographic projection of a world point under the camera. Rotates by yaw
@@ -114,7 +121,7 @@ mod tests {
         cam.rotate(TAU + 0.5, 0.0);
 
         assert!((cam.yaw() - 0.5).abs() < 1e-12);
-        assert!(cam.yaw() >= -PI && cam.yaw < PI);
+        assert!(cam.yaw() >= -PI && cam.yaw() < PI);
     }
 
     #[test]
