@@ -5,9 +5,9 @@ use std::f64::consts::{PI, TAU};
 /// [`Camera::rotate`] keeps both angles wrapped to `[-PI, PI)`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
-    pub yaw: f64,
-    pub pitch: f64,
-    pub zoom: f64,
+    yaw: f64,
+    pitch: f64,
+    zoom: f64,
 }
 
 impl Default for Camera {
@@ -21,8 +21,28 @@ impl Default for Camera {
 }
 
 impl Camera {
+    #[must_use]
+    pub fn new(yaw: f64, pitch: f64, zoom: f64) -> Self {
+        Camera { yaw, pitch, zoom }
+    }
+
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    #[must_use]
+    pub fn yaw(&self) -> f64 {
+        self.yaw
+    }
+
+    #[must_use]
+    pub fn pitch(&self) -> f64 {
+        self.pitch
+    }
+
+    #[must_use]
+    pub fn zoom(&self) -> f64 {
+        self.zoom
     }
 
     /// Turn the camera. Both angles are periodic: they wrap into `[-PI, PI)`, so
@@ -93,8 +113,8 @@ mod tests {
         let mut cam = camera(0.0, 0.0);
         cam.rotate(TAU + 0.5, 0.0);
 
-        assert!((cam.yaw - 0.5).abs() < 1e-12);
-        assert!(cam.yaw >= -PI && cam.yaw < PI);
+        assert!((cam.yaw() - 0.5).abs() < 1e-12);
+        assert!(cam.yaw() >= -PI && cam.yaw < PI);
     }
 
     #[test]

@@ -97,7 +97,7 @@ impl App {
             ),
             Line::from(format!(
                 "yaw {:+.2}   pitch {:+.2}   zoom {:.2}   spin {spin}   selected {selected}",
-                self.camera.yaw, self.camera.pitch, self.camera.zoom
+                self.camera.yaw(), self.camera.pitch(), self.camera.zoom()
             )),
         ])
         .block(Block::bordered().title("controls"));

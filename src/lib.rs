@@ -443,7 +443,7 @@ impl MolecularVisualizer<'_> {
     }
 
     fn render_molecule(&self, area: Rect, buf: &mut Buffer) -> MoleculeCanvas {
-        let canvas = MoleculeCanvas::new(area, self.molecule.radius(), self.camera.zoom);
+        let canvas = MoleculeCanvas::new(area, self.molecule.radius(), self.camera.zoom());
         if area.is_empty() {
             return canvas;
         }
@@ -891,11 +891,7 @@ mod tests {
     fn pick_atom_maps_center_cell_to_origin_atom() {
         let molecule: Molecule = vec![atom(0.0, 0.0, 0.0)].into_iter().collect();
         let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
-        let camera = Camera {
-            yaw: 0.0,
-            pitch: 0.0,
-            zoom: 1.0,
-        };
+        let camera = Camera::new(0.0, 0.0, 1.0);
 
         // Clicking the middle of the canvas hits the atom sitting at the origin.
         assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(0));
@@ -925,11 +921,7 @@ mod tests {
             .into_iter()
             .collect();
         let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
-        let camera = Camera {
-            yaw: 0.0,
-            pitch: 0.0,
-            zoom: 1.0,
-        };
+        let camera = Camera::new(0.0, 0.0, 1.0);
 
         assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(0));
     }
