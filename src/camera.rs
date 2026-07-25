@@ -2,7 +2,7 @@ use std::f64::consts::{PI, TAU};
 
 /// View orientation (radians) and zoom factor.
 ///
-/// [`Camera::rotate`] keeps both angles wrapped to `[-PI, PI)`
+/// [`Camera::rotate`] keeps both angles wrapped to `[-PI, PI)`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     pub yaw: f64,
@@ -142,8 +142,8 @@ mod tests {
         let start = camera(0.6, 0.4);
         let mut cam = start;
 
-        // Step over both poles rather than jumping, so the yaw compensation has
-        // to cancel out on the way round.
+        // Step over both poles rather than jumping, so pitch has to wrap all the
+        // way round and land back on its start.
         for _ in 0..100 {
             cam.rotate(0.0, TAU / 100.0);
         }
