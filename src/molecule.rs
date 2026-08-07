@@ -2,7 +2,7 @@ use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Atom {
     element: Element,
     position: [f64; 3],
@@ -101,7 +101,7 @@ pub struct InvalidBondError {
     atom_count: usize,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Molecule {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
