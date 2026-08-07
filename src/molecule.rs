@@ -1,4 +1,4 @@
-pub use mendeleev::Color as CpkColor;
+use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
 
