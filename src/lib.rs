@@ -9,7 +9,7 @@
 //! use ratatui::crossterm::event;
 //! use ratatui::widgets::Block;
 //! use tui_molviz::molecule::{Atom, Molecule};
-//! use tui_molviz::{Element, MolecularVisualizer};
+//! use tui_molviz::{Element, MoleculeVisualizer};
 //!
 //! fn main() -> color_eyre::Result<()> {
 //!     color_eyre::install()?;
@@ -30,7 +30,7 @@
 //! }
 //!
 //! fn render(frame: &mut Frame<'_>, water: &Molecule) {
-//!     let widget = MolecularVisualizer::new(water).block(Block::bordered().title("Water"));
+//!     let widget = MoleculeVisualizer::new(water).block(Block::bordered().title("Water"));
 //!     frame.render_widget(widget, frame.area());
 //! }
 //! ```
@@ -149,11 +149,11 @@ impl MoleculeCanvas {
 /// widget writes the canvas mapping it just drew with, and the caller reads it
 /// in `pick_atom`.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct MolecularVisualizerState {
+pub struct MoleculeVisualizerState {
     canvas: Option<MoleculeCanvas>,
 }
 
-impl MolecularVisualizerState {
+impl MoleculeVisualizerState {
     /// The canvas mapping from the most recent render, or `None` if the widget
     /// has not been rendered with this state yet. Pass it to
     /// [`MoleculeCanvas::pick_atom`] to hit-test a terminal cell.
@@ -164,7 +164,7 @@ impl MolecularVisualizerState {
 }
 
 #[derive(Debug, Clone)]
-pub struct MolecularVisualizer<'a> {
+pub struct MoleculeVisualizer<'a> {
     /// The molecule to visualize
     molecule: &'a Molecule,
     /// Optional block to wrap the molecular visualizer
@@ -185,8 +185,8 @@ pub struct MolecularVisualizer<'a> {
     highlight_style: Option<Style>,
 }
 
-impl<'a> MolecularVisualizer<'a> {
-    /// Creates a new `MolecularVisualizer` with the given molecule
+impl<'a> MoleculeVisualizer<'a> {
+    /// Creates a new `MoleculeVisualizer` with the given molecule
     ///
     /// # Example
     ///
@@ -194,14 +194,14 @@ impl<'a> MolecularVisualizer<'a> {
     ///
     /// ```rust
     /// use tui_molviz::molecule::{Atom, Molecule};
-    /// use tui_molviz::{Element, MolecularVisualizer};
+    /// use tui_molviz::{Element, MoleculeVisualizer};
     ///
     /// let molecule = Molecule::from_atoms([
     ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
     ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
     ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
     /// ]);
-    /// let visualizer = MolecularVisualizer::new(&molecule);
+    /// let visualizer = MoleculeVisualizer::new(&molecule);
     /// ```
     #[must_use]
     pub fn new(molecule: &'a Molecule) -> Self {
@@ -290,7 +290,7 @@ impl<'a> MolecularVisualizer<'a> {
     }
 }
 
-impl Styled for MolecularVisualizer<'_> {
+impl Styled for MoleculeVisualizer<'_> {
     type Item = Self;
 
     fn style(&self) -> Style {
@@ -302,35 +302,35 @@ impl Styled for MolecularVisualizer<'_> {
     }
 }
 
-impl Widget for MolecularVisualizer<'_> {
+impl Widget for MoleculeVisualizer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         Widget::render(&self, area, buf);
     }
 }
 
-impl Widget for &MolecularVisualizer<'_> {
+impl Widget for &MoleculeVisualizer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let _ = self.render_inner(area, buf);
     }
 }
 
-impl StatefulWidget for MolecularVisualizer<'_> {
-    type State = MolecularVisualizerState;
+impl StatefulWidget for MoleculeVisualizer<'_> {
+    type State = MoleculeVisualizerState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         StatefulWidget::render(&self, area, buf, state);
     }
 }
 
-impl StatefulWidget for &MolecularVisualizer<'_> {
-    type State = MolecularVisualizerState;
+impl StatefulWidget for &MoleculeVisualizer<'_> {
+    type State = MoleculeVisualizerState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         state.canvas = Some(self.render_inner(area, buf));
     }
 }
 
-impl MolecularVisualizer<'_> {
+impl MoleculeVisualizer<'_> {
     /// Depth factor floor; the farthest atom is dimmed to this fraction of
     /// full brightness rather than to black.
     const MIN_DEPTH_BRIGHTNESS: f64 = 0.4;
@@ -609,7 +609,7 @@ mod tests {
             .count()
     }
 
-    fn render_to_buffer(viz: &MolecularVisualizer<'_>) -> Buffer {
+    fn render_to_buffer(viz: &MoleculeVisualizer<'_>) -> Buffer {
         let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 10));
         Widget::render(viz, buffer.area, &mut buffer);
         buffer
@@ -618,9 +618,9 @@ mod tests {
     #[test]
     fn highlight_adds_a_marker_ring() {
         let mol = create_molecule();
-        let plain = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let plain = render_to_buffer(&MoleculeVisualizer::new(&mol).show_bonds(false));
         let marked = render_to_buffer(
-            &MolecularVisualizer::new(&mol)
+            &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
                 .highlight(Some(0)),
         );
@@ -634,9 +634,9 @@ mod tests {
     #[test]
     fn highlight_style_none_suppresses_the_marker() {
         let mol = create_molecule();
-        let no_highlight = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let no_highlight = render_to_buffer(&MoleculeVisualizer::new(&mol).show_bonds(false));
         let suppressed = render_to_buffer(
-            &MolecularVisualizer::new(&mol)
+            &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
                 .highlight(Some(0))
                 .highlight_style(None),
@@ -651,9 +651,9 @@ mod tests {
     #[test]
     fn out_of_range_highlight_is_ignored() {
         let mol = create_molecule();
-        let no_highlight = render_to_buffer(&MolecularVisualizer::new(&mol).show_bonds(false));
+        let no_highlight = render_to_buffer(&MoleculeVisualizer::new(&mol).show_bonds(false));
         let out_of_range = render_to_buffer(
-            &MolecularVisualizer::new(&mol)
+            &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
                 .highlight(Some(999)),
         );
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn mol_gets_drawn() {
         let mol = create_molecule();
-        let viz = MolecularVisualizer::new(&mol).show_bonds(true);
+        let viz = MoleculeVisualizer::new(&mol).show_bonds(true);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn empty_mol_draws_empty_canvas() {
         let empty_mol = Molecule::from_atoms(Vec::new());
-        let viz = MolecularVisualizer::new(&empty_mol).show_bonds(true);
+        let viz = MoleculeVisualizer::new(&empty_mol).show_bonds(true);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn mol_gets_drawn_without_bonds() {
         let mol = create_molecule();
-        let viz = MolecularVisualizer::new(&mol).show_bonds(false);
+        let viz = MoleculeVisualizer::new(&mol).show_bonds(false);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -740,7 +740,7 @@ mod tests {
     #[test]
     fn mol_gets_drawn_without_legend() {
         let mol = create_molecule();
-        let viz = MolecularVisualizer::new(&mol)
+        let viz = MoleculeVisualizer::new(&mol)
             .show_bonds(false)
             .show_molecule_legend(false)
             .block(Block::bordered());
@@ -762,7 +762,7 @@ mod tests {
     #[test]
     fn setting_style_changes_border() {
         let empty_mol = Molecule::from_atoms(Vec::new());
-        let viz = MolecularVisualizer::new(&empty_mol)
+        let viz = MoleculeVisualizer::new(&empty_mol)
             .show_bonds(false)
             .style(Style::new().red())
             .block(Block::bordered())
@@ -787,7 +787,7 @@ mod tests {
     #[test]
     fn dont_double_draw_block() {
         let mol = create_molecule();
-        let viz = MolecularVisualizer::new(&mol)
+        let viz = MoleculeVisualizer::new(&mol)
             .show_bonds(false)
             .block(Block::bordered().title("user"))
             .show_molecule_legend(true);
@@ -809,7 +809,7 @@ mod tests {
     #[test]
     fn render_in_minimal_buffer() {
         let mol = create_molecule();
-        let chart = MolecularVisualizer::new(&mol);
+        let chart = MoleculeVisualizer::new(&mol);
 
         let mut buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
         // This should not panic, even if the buffer is too small to render the chart.
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn render_in_zero_size_buffer() {
         let mol = create_molecule();
-        let chart = MolecularVisualizer::new(&mol);
+        let chart = MoleculeVisualizer::new(&mol);
 
         let mut buffer = Buffer::empty(Rect::ZERO);
         // This should not panic, even if the buffer has zero size.
@@ -832,7 +832,7 @@ mod tests {
         let molecule = vec![Atom::new(Element::N, [0.0, 0.0, 0.0])]
             .into_iter()
             .collect();
-        let viz = MolecularVisualizer::new(&molecule);
+        let viz = MoleculeVisualizer::new(&molecule);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -877,19 +877,19 @@ mod tests {
     #[test]
     fn back_to_front_order_draws_nearest_last() {
         let depths = [
-            MolecularVisualizer::visible_depth(-2.0),
-            MolecularVisualizer::visible_depth(1.0),
-            MolecularVisualizer::visible_depth(0.0),
+            MoleculeVisualizer::visible_depth(-2.0),
+            MoleculeVisualizer::visible_depth(1.0),
+            MoleculeVisualizer::visible_depth(0.0),
         ];
 
-        assert_eq!(MolecularVisualizer::back_to_front_order(&depths), [0, 2, 1]);
+        assert_eq!(MoleculeVisualizer::back_to_front_order(&depths), [0, 2, 1]);
     }
 
     #[test]
     fn depth_factor_brightens_nearer_depths() {
         assert!(
-            MolecularVisualizer::depth_factor(2.0, -1.0, 3.0)
-                > MolecularVisualizer::depth_factor(-1.0, -1.0, 3.0)
+            MoleculeVisualizer::depth_factor(2.0, -1.0, 3.0)
+                > MoleculeVisualizer::depth_factor(-1.0, -1.0, 3.0)
         );
     }
 
@@ -941,7 +941,7 @@ mod tests {
     #[test]
     fn zoom_camera() {
         let mol = create_molecule();
-        let mut viz = MolecularVisualizer::new(&mol);
+        let mut viz = MoleculeVisualizer::new(&mol);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -968,7 +968,7 @@ mod tests {
     #[test]
     fn rotate_camera() {
         let mol = create_molecule();
-        let mut viz = MolecularVisualizer::new(&mol);
+        let mut viz = MoleculeVisualizer::new(&mol);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);
@@ -996,7 +996,7 @@ mod tests {
     #[test]
     fn reset_camera() {
         let mol = create_molecule();
-        let mut viz = MolecularVisualizer::new(&mol);
+        let mut viz = MoleculeVisualizer::new(&mol);
 
         let area = Rect::new(0, 0, 20, 10);
         let mut buffer = Buffer::empty(area);

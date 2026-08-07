@@ -17,7 +17,7 @@ use ratatui::{
 };
 use tui_molviz::camera::Camera;
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{Element, MolecularVisualizer, MolecularVisualizerState};
+use tui_molviz::{Element, MoleculeVisualizer, MoleculeVisualizerState};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -35,7 +35,7 @@ struct App {
     /// Atom the user last clicked, highlighted in the view.
     selected: Option<usize>,
     /// Canvas mapping from the last render, used to hit-test mouse clicks.
-    viz_state: MolecularVisualizerState,
+    viz_state: MoleculeVisualizerState,
 }
 
 impl App {
@@ -47,7 +47,7 @@ impl App {
             last_tick: Instant::now(),
             should_quit: false,
             selected: None,
-            viz_state: MolecularVisualizerState::default(),
+            viz_state: MoleculeVisualizerState::default(),
         }
     }
 
@@ -73,7 +73,7 @@ impl App {
         let [molecule_area, controls_area] =
             Layout::vertical([Constraint::Min(8), Constraint::Length(3)]).areas(frame.area());
 
-        let visualizer = MolecularVisualizer::new(&self.molecule)
+        let visualizer = MoleculeVisualizer::new(&self.molecule)
             .camera(self.camera)
             .highlight(self.selected)
             .block(Block::bordered().title("tui-molviz showcase"))

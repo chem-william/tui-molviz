@@ -1,6 +1,6 @@
 use ratatui::{Frame, crossterm::event, widgets::Block};
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{Element, MolecularVisualizer};
+use tui_molviz::{Element, MoleculeVisualizer};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -24,7 +24,7 @@ fn main() -> color_eyre::Result<()> {
 
 fn render(frame: &mut Frame<'_>, molecule: &Molecule) {
     let visualizer =
-        MolecularVisualizer::new(molecule).block(Block::bordered().title("Water molecule"));
+        MoleculeVisualizer::new(molecule).block(Block::bordered().title("Water molecule"));
 
     frame.render_widget(visualizer, frame.area());
 }
