@@ -30,6 +30,8 @@ impl Camera {
     #[must_use]
     pub fn new(yaw: f64, pitch: f64, zoom: f64) -> Self {
         let zoom = Camera::clamp_zoom(zoom);
+        let yaw = wrap_angle(yaw);
+        let pitch = wrap_angle(pitch);
         Camera { yaw, pitch, zoom }
     }
 
