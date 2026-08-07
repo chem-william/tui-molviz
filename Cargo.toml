@@ -1,6 +1,6 @@
 [package]
 name = "tui-molviz"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["William Bro-Jørgensen"]
 edition = "2024"
 rust-version = "1.88.0"
