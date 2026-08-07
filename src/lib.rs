@@ -81,8 +81,8 @@ impl MoleculeCanvas {
     const MAX_ATOM_RADIUS_DOTS: f64 = 5.0;
 
     #[must_use]
-    pub fn contains_cell(&self, col: u16, row: u16) -> bool {
-        self.inner.contains(Position { x: col, y: row })
+    pub fn contains_cell(&self, position: impl Into<Position>) -> bool {
+        self.inner.contains(position.into())
     }
 
     /// Fits a molecule of the given radius into `inner` at the camera's zoom.
@@ -115,12 +115,13 @@ impl MoleculeCanvas {
         &self,
         camera: Camera,
         molecule: &Molecule,
-        col: u16,
-        row: u16,
+        position: impl Into<Position>,
     ) -> Option<usize> {
-        if !self.inner.contains(Position { x: col, y: row }) {
+        let position = position.into();
+        if !self.inner.contains(position) {
             return None;
         }
+        let (col, row) = (position.x, position.y);
 
         // Cell -> canvas-data coords, sampling the cell's center; y is flipped.
         let fx = (f64::from(col - self.inner.x) + 0.5) / f64::from(self.inner.width);
@@ -904,23 +905,23 @@ mod tests {
         let camera = Camera::new(0.0, 0.0, 1.0);
 
         // Clicking the middle of the canvas hits the atom sitting at the origin.
-        assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(0));
+        assert_eq!(canvas.pick_atom(camera, &molecule, (10, 5)), Some(0));
 
         // A corner click lands on empty space.
-        assert_eq!(canvas.pick_atom(camera, &molecule, 0, 0), None);
+        assert_eq!(canvas.pick_atom(camera, &molecule, (0, 0)), None);
 
         // A click outside the canvas rect is rejected outright.
-        assert_eq!(canvas.pick_atom(camera, &molecule, 99, 99), None);
+        assert_eq!(canvas.pick_atom(camera, &molecule, (99, 99)), None);
     }
 
     #[test]
     fn canvas_reports_whether_a_cell_is_inside_its_area() {
         let canvas = MoleculeCanvas::new(Rect::new(2, 3, 5, 4), 1.0, 1.0);
 
-        assert!(canvas.contains_cell(2, 3));
-        assert!(canvas.contains_cell(6, 6));
-        assert!(!canvas.contains_cell(7, 6));
-        assert!(!canvas.contains_cell(6, 7));
+        assert!(canvas.contains_cell((2, 3)));
+        assert!(canvas.contains_cell((6, 6)));
+        assert!(!canvas.contains_cell((7, 6)));
+        assert!(!canvas.contains_cell((6, 7)));
     }
 
     #[test]
@@ -933,7 +934,7 @@ mod tests {
         let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
         let camera = Camera::new(0.0, 0.0, 1.0);
 
-        assert_eq!(canvas.pick_atom(camera, &molecule, 10, 5), Some(0));
+        assert_eq!(canvas.pick_atom(camera, &molecule, (10, 5)), Some(0));
     }
 
     const CAMERA_ROTATION_STEP: f64 = 0.12;
