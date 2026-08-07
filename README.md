@@ -28,7 +28,7 @@ The main usage is to visualize a `Molecule` in your terminal using `MolecularVis
 Ratatui:
 
 ```rust
-use mendeleev::Element;
+use tui_molviz::Element;
 use ratatui::{Frame, widgets::Block};
 use tui_molviz::molecule::{Atom, Molecule};
 use tui_molviz::MolecularVisualizer;
