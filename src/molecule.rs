@@ -72,10 +72,12 @@ impl Bond {
         Self { start, end }
     }
 
+    #[must_use]
     pub fn start(&self) -> usize {
         self.start
     }
 
+    #[must_use]
     pub fn end(&self) -> usize {
         self.end
     }
