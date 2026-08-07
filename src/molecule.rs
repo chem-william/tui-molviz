@@ -95,8 +95,8 @@ impl From<(usize, usize)> for Bond {
     bond.end()
 )]
 pub struct InvalidBondError {
-    pub bond: Bond,
-    pub atom_count: usize,
+    bond: Bond,
+    atom_count: usize,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd)]

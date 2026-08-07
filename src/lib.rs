@@ -150,7 +150,17 @@ impl MoleculeCanvas {
 /// in `pick_atom`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MolecularVisualizerState {
-    pub canvas: Option<MoleculeCanvas>,
+    canvas: Option<MoleculeCanvas>,
+}
+
+impl MolecularVisualizerState {
+    /// The canvas mapping from the most recent render, or `None` if the widget
+    /// has not been rendered with this state yet. Pass it to
+    /// [`MoleculeCanvas::pick_atom`] to hit-test a terminal cell.
+    #[must_use]
+    pub fn canvas(&self) -> Option<MoleculeCanvas> {
+        self.canvas
+    }
 }
 
 #[derive(Debug, Clone)]

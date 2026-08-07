@@ -149,7 +149,7 @@ impl App {
     /// selection. `pick_atom` only needs the raw column/row and the same camera
     /// the last frame was drawn with, so the widget stays event-source agnostic.
     fn handle_click(&mut self, col: u16, row: u16) {
-        if let Some(canvas) = self.viz_state.canvas {
+        if let Some(canvas) = self.viz_state.canvas() {
             let hit = canvas.pick_atom(self.camera, &self.molecule, col, row);
             // A click on empty space clears the selection.
             self.selected = hit;
