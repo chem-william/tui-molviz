@@ -24,14 +24,14 @@ cargo run --example quickstart
 
 Press any key to quit.
 
-The main usage is to visualize a `Molecule` in your terminal using `MolecularVisualizer` by rendering it using
+The main usage is to visualize a `Molecule` in your terminal using `MoleculeVisualizer` by rendering it using
 Ratatui:
 
 ```rust
 use tui_molviz::Element;
 use ratatui::{Frame, widgets::Block};
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::MolecularVisualizer;
+use tui_molviz::MoleculeVisualizer;
 
 fn render(frame: &mut Frame<'_>) {
     let water = Molecule::from_atoms([
@@ -40,7 +40,7 @@ fn render(frame: &mut Frame<'_>) {
         Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
     ]);
 
-    let widget = MolecularVisualizer::new(&water).block(Block::bordered().title("Water"));
+    let widget = MoleculeVisualizer::new(&water).block(Block::bordered().title("Water"));
 
     frame.render_widget(widget, frame.area());
 }
