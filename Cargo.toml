@@ -8,7 +8,7 @@ description = "A molecular visualizer widget for Ratatui"
 readme = "README.md"
 repository = "https://github.com/chem-william/tui-molviz"
 license = "MIT"
-keywords = ["ratatui", "chemistry"]
+keywords = ["ratatui", "chemistry", "tui", "visualization", "molecule"]
 categories = ["science", "command-line-utilities"]
 exclude = [".github/", "assets/", ".gitignore"]
 
