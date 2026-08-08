@@ -1,3 +1,5 @@
+use std::{slice, vec};
+
 use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
@@ -249,12 +251,68 @@ impl Molecule {
     pub fn radius(&self) -> f64 {
         self.radius
     }
+
+    /// Returns an iterator over the molecule's atoms.
+    ///
+    /// Atoms are yielded in the order they were supplied at construction, so an
+    /// atom's position in this iteration is the index that [`Bond::start`],
+    /// [`Bond::end`], and [`pick_atom`](crate::MoleculeCanvas::pick_atom) refer
+    /// to.
+    ///
+    /// There is deliberately no `iter_mut`: the centroid the atoms are recentered
+    /// on, the cached [`radius`](Self::radius), and the perceived [`bonds`](Self::bonds)
+    /// are all derived from the positions at construction, so handing out
+    /// `&mut Atom` would silently invalidate them. Build a new [`Molecule`] from
+    /// the edited atoms instead.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// let elements: Vec<_> = water.iter().map(Atom::element).collect();
+    /// assert_eq!(elements, [Element::O, Element::H, Element::H]);
+    /// ```
+    pub fn iter(&self) -> slice::Iter<'_, Atom> {
+        self.atoms.iter()
+    }
 }
 
 impl FromIterator<Atom> for Molecule {
     /// Bonds are perceived from interatomic distances, same as [`Molecule::from_atoms`].
     fn from_iter<T: IntoIterator<Item = Atom>>(iter: T) -> Self {
         Self::from_atoms(iter)
+    }
+}
+
+impl IntoIterator for Molecule {
+    type Item = Atom;
+    type IntoIter = vec::IntoIter<Atom>;
+
+    /// Consumes the molecule and yields its atoms, dropping the bonds.
+    ///
+    /// Collecting the result back into a [`Molecule`] re-perceives bonds so a
+    /// molecule built with explicit bonds via [`Molecule::from_atoms_with_bonds`]
+    /// drops the supplied bonds.
+    fn into_iter(self) -> Self::IntoIter {
+        self.atoms.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Molecule {
+    type Item = &'a Atom;
+    type IntoIter = slice::Iter<'a, Atom>;
+
+    /// Equivalent to [`Molecule::iter`].
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -300,5 +358,13 @@ mod tests {
             ],
             "molecule had unexpected bonds"
         );
+    }
+
+    #[test]
+    fn iter_mol_yields_atoms() {
+        let mol = create_molecule();
+
+        assert_eq!(mol.iter().copied().collect::<Vec<_>>(), mol.atoms());
+        assert_eq!(mol.iter().len(), 4);
     }
 }
