@@ -60,10 +60,7 @@ use ratatui::{
     },
 };
 
-/// The braille canvas a molecule is drawn on: the screen rect inside the block
-/// border, the world-space half-extents the canvas is bounded to (`bx`/`by`),
-/// and the braille-dots-per-world-unit scale (`dpu`). Owning the mapping in one
-/// place keeps drawing (`render_molecule`) and hit-testing (`pick_atom`) in sync.
+/// The braille canvas a molecule is drawn on.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct MoleculeCanvas {
     inner: Rect,
@@ -146,9 +143,7 @@ impl MoleculeCanvas {
     }
 }
 
-/// State handed back by rendering so a later mouse event can hit-test: the
-/// widget writes the canvas mapping it just drew with, and the caller reads it
-/// in `pick_atom`.
+/// State handed back by rendering so a later mouse event can hit-test.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct MoleculeVisualizerState {
     canvas: Option<MoleculeCanvas>,
