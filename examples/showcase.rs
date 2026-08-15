@@ -17,7 +17,7 @@ use ratatui::{
 };
 use tui_molviz::camera::Camera;
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{Element, MoleculeVisualizer, MoleculeVisualizerState};
+use tui_molviz::{AtomIndex, Element, MoleculeVisualizer, MoleculeVisualizerState};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -33,7 +33,7 @@ struct App {
     last_tick: Instant,
     should_quit: bool,
     /// Atom the user last clicked, highlighted in the view.
-    selected: Option<usize>,
+    selected: Option<AtomIndex>,
     /// Canvas mapping from the last render, used to hit-test mouse clicks.
     viz_state: MoleculeVisualizerState,
 }
@@ -86,7 +86,7 @@ impl App {
         let spin = if self.auto_spin { "on" } else { "off" };
         let selected = match self.selected {
             Some(i) => {
-                let atom = &self.molecule.atoms()[i];
+                let atom = &self.molecule.atoms()[i.get()];
                 format!("{} (#{i})", atom.element().symbol())
             }
             None => "none".to_string(),
