@@ -108,6 +108,47 @@ impl MoleculeCanvas {
     ///
     /// `camera` and `molecule` must match what the last render drew so the
     /// projection lines up with the pixels on screen.
+    ///
+    /// # Example
+    ///
+    /// The typical flow is a stateful render, which hands back the canvas
+    /// mapping, then a hit-test whenever a terminal cell comes in from any
+    /// event source:
+    ///
+    /// ```rust
+    /// use ratatui::{buffer::Buffer, layout::Rect, widgets::StatefulWidget};
+    /// use tui_molviz::camera::Camera;
+    /// use tui_molviz::molecule::{Atom, Molecule, AtomIndex};
+    /// use tui_molviz::{Element, MoleculeVisualizer, MoleculeVisualizerState};
+    ///
+    /// let molecule = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    /// let camera = Camera::default();
+    ///
+    /// // Render statefully (`frame.render_stateful_widget` in a real app).
+    /// let mut state = MoleculeVisualizerState::default();
+    /// let area = Rect::new(0, 0, 30, 10);
+    /// let mut buffer = Buffer::empty(area);
+    /// StatefulWidget::render(
+    ///     &MoleculeVisualizer::new(&molecule).camera(camera),
+    ///     area,
+    ///     &mut buffer,
+    ///     &mut state,
+    /// );
+    ///
+    /// // A mouse click reports the cell it landed in.
+    /// let (col, row) = (13u16, 6u16);
+    ///
+    /// // Hit-test with the same camera and molecule the frame was drawn with.
+    /// let selected = state.canvas().unwrap().pick_atom(camera, &molecule, (col, row));
+    /// assert_eq!(selected, Some(AtomIndex::new(0)), "the click landed on the oxygen");
+    ///
+    /// // Feed the index into `.highlight` for the next frame.
+    /// let _next = MoleculeVisualizer::new(&molecule).camera(camera).highlight(selected);
+    /// ```
     #[must_use]
     pub fn pick_atom(
         &self,
