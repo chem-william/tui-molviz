@@ -15,7 +15,7 @@ impl Atom {
     /// Creates a new `Atom` from the given [`Element`] and `position`.
     #[must_use]
     pub fn new(element: Element, position: [f64; 3]) -> Self {
-        Atom {
+        Self {
             element,
             position,
             covalent_radius: Self::bond_radius(element),
@@ -131,7 +131,7 @@ impl Molecule {
                 let bond_cutoff =
                     (a.covalent_radius() + b.covalent_radius()) * Self::BOND_DISTANCE_TOLERANCE;
                 if d > Self::MIN_BOND_DISTANCE && d <= bond_cutoff {
-                    bonds.push(Bond { start: i, end: j });
+                    bonds.push(Bond::new(i, j));
                 }
             }
         }

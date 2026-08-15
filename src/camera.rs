@@ -29,10 +29,11 @@ impl Camera {
     /// and `yaw` and `pitch` has been folded in `[-PI, PI)`.
     #[must_use]
     pub fn new(yaw: f64, pitch: f64, zoom: f64) -> Self {
-        let zoom = Camera::clamp_zoom(zoom);
-        let yaw = wrap_angle(yaw);
-        let pitch = wrap_angle(pitch);
-        Camera { yaw, pitch, zoom }
+        Self {
+            yaw: wrap_angle(yaw),
+            pitch: wrap_angle(pitch),
+            zoom: Self::clamp_zoom(zoom),
+        }
     }
 
     pub fn reset(&mut self) {
