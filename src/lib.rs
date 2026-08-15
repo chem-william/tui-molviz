@@ -397,10 +397,6 @@ impl MoleculeVisualizer<'_> {
         Line::from(spans).centered()
     }
 
-    fn visible_depth(projected_z: f64) -> f64 {
-        projected_z
-    }
-
     fn depth_factor(z: f64, zmin: f64, zspan: f64) -> f64 {
         Self::MIN_DEPTH_BRIGHTNESS + Self::DEPTH_BRIGHTNESS_RANGE * ((z - zmin) / zspan)
     }
@@ -464,7 +460,7 @@ impl MoleculeVisualizer<'_> {
             })
             .collect();
 
-        let proj_depths: Vec<f64> = proj.iter().map(|p| Self::visible_depth(p.2)).collect();
+        let proj_depths: Vec<f64> = proj.iter().map(|p| p.2).collect();
         let zmin = proj_depths.iter().copied().fold(f64::INFINITY, f64::min);
         let zmax = proj_depths
             .iter()
@@ -872,11 +868,7 @@ mod tests {
 
     #[test]
     fn back_to_front_order_draws_nearest_last() {
-        let depths = [
-            MoleculeVisualizer::visible_depth(-2.0),
-            MoleculeVisualizer::visible_depth(1.0),
-            MoleculeVisualizer::visible_depth(0.0),
-        ];
+        let depths = [-2.0, 1.0, 0.0];
 
         assert_eq!(MoleculeVisualizer::back_to_front_order(&depths), [0, 2, 1]);
     }
