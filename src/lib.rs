@@ -413,7 +413,7 @@ impl MoleculeVisualizer<'_> {
     /// neighbouring cells share a color and the terminal can run-length batch the
     /// color escapes. Only the dimming is stepped, not the hue.
     #[must_use]
-    fn shade(color: &CpkColor, f: f64) -> ratatui::style::Color {
+    fn shade(color: CpkColor, f: f64) -> ratatui::style::Color {
         let f = (f.clamp(0.0, 1.0) * Self::SHADE_LEVELS).round() / Self::SHADE_LEVELS;
         ratatui::style::Color::Rgb(
             (f64::from(color.r) * f) as u8,
@@ -479,7 +479,7 @@ impl MoleculeVisualizer<'_> {
                 .map(|&bond| {
                     let (s, e) = (bond.start().get(), bond.end().get());
                     let color = Self::shade(
-                        &Self::BOND_COLOR,
+                        Self::BOND_COLOR,
                         depth(f64::midpoint(proj_depths[s], proj_depths[e])),
                     );
                     (proj[s].0, proj[s].1, proj[e].0, proj[e].1, color)
@@ -499,7 +499,7 @@ impl MoleculeVisualizer<'_> {
         let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
         for i in order {
             let atom = &self.molecule.atoms()[i];
-            let color = Self::shade(&atom.cpk(), depth(proj_depths[i]));
+            let color = Self::shade(atom.cpk(), depth(proj_depths[i]));
             if groups.last().map(|(c, _)| *c) != Some(color) {
                 groups.push((color, Vec::new()));
             }
