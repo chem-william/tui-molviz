@@ -15,7 +15,7 @@ fn main() -> color_eyre::Result<()> {
         loop {
             terminal.draw(|frame| render(frame, &molecule))?;
 
-            if event::read()?.as_key_press_event().is_some() {
+            if event::read()?.is_key_press() {
                 break Ok(());
             }
         }
