@@ -49,6 +49,7 @@ use crate::molecule::Molecule;
 
 pub use mendeleev::Color as CpkColor;
 pub use mendeleev::Element;
+pub use molecule::AtomIndex;
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
@@ -100,9 +101,9 @@ impl MoleculeCanvas {
             .clamp(Self::MIN_ATOM_RADIUS_DOTS, Self::MAX_ATOM_RADIUS_DOTS)
     }
 
-    /// Inverse of the canvas mapping: the atom whose drawn disk a clicked
-    /// terminal cell lands in (front-most on overlap), or `None` for empty
-    /// space. The canvas maps data x in `[-bx, bx]` left→right and data y in
+    /// Inverse of the canvas mapping: the [`AtomIndex`] of the atom whose drawn
+    /// disk a clicked terminal cell lands in (front-most on overlap), or `None`
+    /// for empty space. The canvas maps data x in `[-bx, bx]` left→right and data y in
     /// `[-by, by]` bottom→top, so the row axis is flipped relative to screen rows.
     ///
     /// `camera` and `molecule` must match what the last render drew so the
@@ -113,7 +114,7 @@ impl MoleculeCanvas {
         camera: Camera,
         molecule: &Molecule,
         position: impl Into<Position>,
-    ) -> Option<usize> {
+    ) -> Option<AtomIndex> {
         let position = position.into();
         if !self.inner.contains(position) {
             return None;
@@ -139,7 +140,7 @@ impl MoleculeCanvas {
                 (d2 <= r_world * r_world).then_some((i, p.2))
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(i, _)| i)
+            .map(|(i, _)| AtomIndex::new(i))
     }
 }
 
@@ -175,7 +176,7 @@ pub struct MoleculeVisualizer<'a> {
     camera: Camera,
     /// Atom index to draw a highlight marker on, if any. Out-of-range indices
     /// are ignored at render time. Default is `None`.
-    highlight: Option<usize>,
+    highlight: Option<AtomIndex>,
     /// Style of the highlight marker (its `fg` color is used). `None` disables
     /// the highlight even when [`highlight`](Self::highlight) is set.
     highlight_style: Option<Style>,
@@ -263,13 +264,14 @@ impl<'a> MoleculeVisualizer<'a> {
         self
     }
 
-    /// Highlights the atom at the given index by drawing a marker ring around it,
-    /// or clears the highlight with `None`. The index is typically one returned by
-    /// [`MoleculeCanvas::pick_atom`]; out-of-range indices are ignored at render time.
+    /// Highlights the atom at the given [`AtomIndex`] by drawing a marker ring
+    /// around it, or clears the highlight with `None`. The index is typically
+    /// one returned by [`MoleculeCanvas::pick_atom`]; out-of-range indices are
+    /// ignored at render time.
     ///
     /// This is a fluent setter method which must be chained or used as it consumes self
     #[must_use = "method moves the value of self and returns the modified value"]
-    pub const fn highlight(mut self, highlight: Option<usize>) -> Self {
+    pub const fn highlight(mut self, highlight: Option<AtomIndex>) -> Self {
         self.highlight = highlight;
         self
     }
@@ -354,7 +356,7 @@ impl MoleculeVisualizer<'_> {
         proj: &[(f64, f64, f64)],
         canvas: &MoleculeCanvas,
     ) -> Option<(Vec<(f64, f64)>, ratatui::style::Color)> {
-        let i = self.highlight.filter(|&i| i < proj.len())?;
+        let i = self.highlight.filter(|&i| i.get() < proj.len())?.get();
         let color = self
             .highlight_style?
             .fg
@@ -475,20 +477,12 @@ impl MoleculeVisualizer<'_> {
                 .bonds()
                 .iter()
                 .map(|&bond| {
+                    let (s, e) = (bond.start().get(), bond.end().get());
                     let color = Self::shade(
                         &Self::BOND_COLOR,
-                        depth(f64::midpoint(
-                            proj_depths[bond.start()],
-                            proj_depths[bond.end()],
-                        )),
+                        depth(f64::midpoint(proj_depths[s], proj_depths[e])),
                     );
-                    (
-                        proj[bond.start()].0,
-                        proj[bond.start()].1,
-                        proj[bond.end()].0,
-                        proj[bond.end()].1,
-                        color,
-                    )
+                    (proj[s].0, proj[s].1, proj[e].0, proj[e].1, color)
                 })
                 .collect()
         } else {
@@ -564,7 +558,7 @@ impl MoleculeVisualizer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::molecule::{Atom, Bond};
+    use crate::molecule::{Atom, AtomIndex, Bond};
 
     use super::*;
 
@@ -617,7 +611,7 @@ mod tests {
         let marked = render_to_buffer(
             &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
-                .highlight(Some(0)),
+                .highlight(Some(AtomIndex::new(0))),
         );
 
         assert!(
@@ -633,7 +627,7 @@ mod tests {
         let suppressed = render_to_buffer(
             &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
-                .highlight(Some(0))
+                .highlight(Some(AtomIndex::new(0)))
                 .highlight_style(None),
         );
 
@@ -650,7 +644,7 @@ mod tests {
         let out_of_range = render_to_buffer(
             &MoleculeVisualizer::new(&mol)
                 .show_bonds(false)
-                .highlight(Some(999)),
+                .highlight(Some(AtomIndex::new(999))),
         );
 
         assert_eq!(no_highlight, out_of_range);
@@ -877,7 +871,10 @@ mod tests {
         let camera = Camera::new(0.0, 0.0, 1.0);
 
         // Clicking the middle of the canvas hits the atom sitting at the origin.
-        assert_eq!(canvas.pick_atom(camera, &molecule, (10, 5)), Some(0));
+        assert_eq!(
+            canvas.pick_atom(camera, &molecule, (10, 5)),
+            Some(AtomIndex::new(0))
+        );
 
         // A corner click lands on empty space.
         assert_eq!(canvas.pick_atom(camera, &molecule, (0, 0)), None);
@@ -906,7 +903,10 @@ mod tests {
         let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), molecule.radius(), 1.0);
         let camera = Camera::new(0.0, 0.0, 1.0);
 
-        assert_eq!(canvas.pick_atom(camera, &molecule, (10, 5)), Some(0));
+        assert_eq!(
+            canvas.pick_atom(camera, &molecule, (10, 5)),
+            Some(AtomIndex::new(0))
+        );
     }
 
     const CAMERA_ROTATION_STEP: f64 = 0.12;
@@ -996,6 +996,10 @@ mod tests {
         ];
         let mol = Molecule::from_atoms_with_bonds(atoms, [(0, 1), (1, 2)]);
 
-        assert_eq!(mol.bonds(), vec![Bond::new(0, 1), Bond::new(1, 2)]);
+        assert_eq!(mol.bonds(), vec![Bond::from((0, 1)), Bond::from((1, 2))]);
+        assert_eq!(
+            mol.bonds()[0],
+            Bond::new(AtomIndex::new(0), AtomIndex::new(1))
+        );
     }
 }

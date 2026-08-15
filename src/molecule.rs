@@ -1,4 +1,4 @@
-use std::{slice, vec};
+use std::{fmt, slice, vec};
 
 use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
@@ -61,33 +61,113 @@ impl Atom {
     }
 }
 
+/// The position of an atom in a [`Molecule`]'s atom list.
+///
+/// An `AtomIndex` is what [`Bond::start`] and [`Bond::end`] name, and what
+/// [`MoleculeCanvas::pick_atom`](crate::MoleculeCanvas::pick_atom) returns, so
+/// a picked atom can be highlighted without any further conversion.
+///
+/// [`AtomIndex::new`] does not check the position against any molecule's atom
+/// count.
+///
+/// # Example
+///
+/// ```rust
+/// use tui_molviz::molecule::AtomIndex;
+///
+/// let index = AtomIndex::new(2);
+/// assert_eq!(index.get(), 2);
+/// assert_eq!(format!("{index}"), "2");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AtomIndex {
+    index: usize,
+}
+
+impl AtomIndex {
+    /// Creates a new [`Self`] from a raw position without checking it.
+    ///
+    /// Use [`Molecule::try_from_atoms_with_bonds`] when positions come from
+    /// untrusted input, e.g. a parsed file.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::AtomIndex;
+    ///
+    /// let index: AtomIndex = 2.into();
+    /// assert_eq!(index.get(), 2);
+    /// ```
+    #[must_use]
+    pub const fn new(index: usize) -> Self {
+        Self { index }
+    }
+
+    /// The raw position of the atom in the atom list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::AtomIndex;
+    ///
+    /// let elements = ["O", "H", "H"];
+    /// let index = AtomIndex::new(1);
+    /// assert_eq!(elements[index.get()], "H");
+    /// ```
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.index
+    }
+}
+
+impl From<usize> for AtomIndex {
+    fn from(index: usize) -> Self {
+        Self::new(index)
+    }
+}
+
+impl From<AtomIndex> for usize {
+    fn from(index: AtomIndex) -> Self {
+        index.get()
+    }
+}
+
+impl fmt::Display for AtomIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.index, f)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bond {
-    start: usize,
-    end: usize,
+    start: AtomIndex,
+    end: AtomIndex,
 }
 
 impl Bond {
     /// Creates a new `Bond` that begins at `start` and ends at `end`.
     #[must_use]
-    pub fn new(start: usize, end: usize) -> Self {
+    pub fn new(start: AtomIndex, end: AtomIndex) -> Self {
         Self { start, end }
     }
 
+    /// The atom the bond begins at.
     #[must_use]
-    pub fn start(&self) -> usize {
+    pub fn start(&self) -> AtomIndex {
         self.start
     }
 
+    /// The atom the bond ends at.
     #[must_use]
-    pub fn end(&self) -> usize {
+    pub fn end(&self) -> AtomIndex {
         self.end
     }
 }
 
 impl From<(usize, usize)> for Bond {
+    /// Converts a `(start, end)` pair of raw positions into a [`Bond`].
     fn from((start, end): (usize, usize)) -> Self {
-        Self { start, end }
+        Self::new(AtomIndex::from(start), AtomIndex::from(end))
     }
 }
 
@@ -131,7 +211,7 @@ impl Molecule {
                 let bond_cutoff =
                     (a.covalent_radius() + b.covalent_radius()) * Self::BOND_DISTANCE_TOLERANCE;
                 if d > Self::MIN_BOND_DISTANCE && d <= bond_cutoff {
-                    bonds.push(Bond::new(i, j));
+                    bonds.push(Bond::from((i, j)));
                 }
             }
         }
@@ -220,7 +300,7 @@ impl Molecule {
 
         if let Some(&bond) = bonds
             .iter()
-            .find(|bond| bond.start >= atoms.len() || bond.end >= atoms.len())
+            .find(|bond| bond.start().get() >= atoms.len() || bond.end().get() >= atoms.len())
         {
             return Err(InvalidBondError {
                 bond,
@@ -255,7 +335,7 @@ impl Molecule {
     /// Returns an iterator over the molecule's atoms.
     ///
     /// Atoms are yielded in the order they were supplied at construction, so an
-    /// atom's position in this iteration is the index that [`Bond::start`],
+    /// atom's position in this iteration is the [`AtomIndex`] that [`Bond::start`],
     /// [`Bond::end`], and [`pick_atom`](crate::MoleculeCanvas::pick_atom) refer
     /// to.
     ///
@@ -351,10 +431,10 @@ mod tests {
         assert_eq!(
             mol.bonds(),
             vec![
-                Bond::new(0, 1),
-                Bond::new(0, 3),
-                Bond::new(1, 2),
-                Bond::new(2, 3),
+                Bond::from((0, 1)),
+                Bond::from((0, 3)),
+                Bond::from((1, 2)),
+                Bond::from((2, 3)),
             ],
             "molecule had unexpected bonds"
         );
@@ -366,5 +446,31 @@ mod tests {
 
         assert_eq!(mol.iter().copied().collect::<Vec<_>>(), mol.atoms());
         assert_eq!(mol.iter().len(), 4);
+    }
+
+    #[test]
+    fn atom_index_round_trips_through_usize() {
+        let index = AtomIndex::new(7);
+
+        assert_eq!(index.get(), 7);
+        assert_eq!(usize::from(index), 7);
+        assert_eq!(AtomIndex::from(7), index);
+        assert_eq!(format!("{index}"), "7");
+    }
+
+    #[test]
+    fn out_of_range_bond_is_rejected() {
+        let atoms = [Atom::new(Element::C, [0.0, 0.0, 0.0])];
+        let bond = Bond::from((0, 1));
+
+        let err = Molecule::try_from_atoms_with_bonds(atoms, [bond]).unwrap_err();
+
+        assert_eq!(
+            err,
+            InvalidBondError {
+                bond,
+                atom_count: 1
+            }
+        );
     }
 }
