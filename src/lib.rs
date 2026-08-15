@@ -431,10 +431,9 @@ impl MoleculeVisualizer<'_> {
 
     fn render_outer_block(&self, area: Rect, buf: &mut Buffer) -> Rect {
         let block = match (self.block.clone(), self.show_molecule_legend) {
+            // No user block and no legend: nothing to wrap, draw on the raw area.
+            (None, false) => return area,
             (None, true) => Block::bordered().title_bottom(self.draw_molecule_legend()),
-            (None, false) => {
-                return area;
-            }
             (Some(block), true) => block.title_bottom(self.draw_molecule_legend()),
             (Some(block), false) => block,
         };
