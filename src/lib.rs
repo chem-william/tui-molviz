@@ -602,7 +602,11 @@ mod tests {
     }
 
     fn render_to_buffer(viz: &MoleculeVisualizer<'_>) -> Buffer {
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 10));
+        render_to_buffer_at(viz, Rect::new(0, 0, 20, 10))
+    }
+
+    fn render_to_buffer_at(viz: &MoleculeVisualizer<'_>, area: Rect) -> Buffer {
+        let mut buffer = Buffer::empty(area);
         Widget::render(viz, buffer.area, &mut buffer);
         buffer
     }
@@ -658,10 +662,7 @@ mod tests {
         let mol = create_molecule();
         let viz = MoleculeVisualizer::new(&mol).show_bonds(true);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -684,10 +685,7 @@ mod tests {
         let empty_mol = Molecule::from_atoms(Vec::new());
         let viz = MoleculeVisualizer::new(&empty_mol).show_bonds(true);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -710,9 +708,7 @@ mod tests {
         let mol = create_molecule();
         let viz = MoleculeVisualizer::new(&mol).show_bonds(false);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -737,9 +733,7 @@ mod tests {
             .show_molecule_legend(false)
             .block(Block::bordered());
 
-        let area = Rect::new(0, 0, 10, 5);
-        let mut buffer = Buffer::empty(area);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer_at(&viz, Rect::new(0, 0, 10, 5));
 
         let expected = vec![
             "┌────────┐".to_string(),
@@ -760,9 +754,7 @@ mod tests {
             .block(Block::bordered())
             .show_molecule_legend(true);
 
-        let area = Rect::new(0, 0, 10, 5);
-        let mut buffer = Buffer::empty(area);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer_at(&viz, Rect::new(0, 0, 10, 5));
 
         let mut expected = Buffer::with_lines([
             "┌────────┐",
@@ -784,9 +776,7 @@ mod tests {
             .block(Block::bordered().title("user"))
             .show_molecule_legend(true);
 
-        let area = Rect::new(0, 0, 10, 5);
-        let mut buffer = Buffer::empty(area);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer_at(&viz, Rect::new(0, 0, 10, 5));
 
         let expected = vec![
             "┌user────┐".to_string(),
@@ -801,22 +791,20 @@ mod tests {
     #[test]
     fn render_in_minimal_buffer() {
         let mol = create_molecule();
-        let chart = MoleculeVisualizer::new(&mol);
+        let viz = MoleculeVisualizer::new(&mol);
 
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
-        // This should not panic, even if the buffer is too small to render the chart.
-        Widget::render(&chart, buffer.area, &mut buffer);
+        // This should not panic, even if the buffer is too small to render.
+        let buffer = render_to_buffer_at(&viz, Rect::new(0, 0, 1, 1));
         assert_eq!(buffer, Buffer::with_lines(["┌"]));
     }
 
     #[test]
     fn render_in_zero_size_buffer() {
         let mol = create_molecule();
-        let chart = MoleculeVisualizer::new(&mol);
+        let viz = MoleculeVisualizer::new(&mol);
 
-        let mut buffer = Buffer::empty(Rect::ZERO);
         // This should not panic, even if the buffer has zero size.
-        Widget::render(&chart, buffer.area, &mut buffer);
+        render_to_buffer_at(&viz, Rect::ZERO);
     }
 
     #[test]
@@ -826,9 +814,7 @@ mod tests {
             .collect();
         let viz = MoleculeVisualizer::new(&molecule);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let mut expected = Buffer::with_lines([
             "┌──────────────────┐",
@@ -931,11 +917,8 @@ mod tests {
         let mol = create_molecule();
         let mut viz = MoleculeVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-
         viz.camera.zoom_by(2.0);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -958,12 +941,9 @@ mod tests {
         let mol = create_molecule();
         let mut viz = MoleculeVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-
         viz.camera
             .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
@@ -986,14 +966,11 @@ mod tests {
         let mol = create_molecule();
         let mut viz = MoleculeVisualizer::new(&mol);
 
-        let area = Rect::new(0, 0, 20, 10);
-        let mut buffer = Buffer::empty(area);
-
         viz.camera
             .rotate(6.0 * CAMERA_ROTATION_STEP, -CAMERA_ROTATION_STEP * 6.0);
         viz.camera.zoom_by(2.0);
         viz.camera.reset();
-        Widget::render(&viz, buffer.area, &mut buffer);
+        let buffer = render_to_buffer(&viz);
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
