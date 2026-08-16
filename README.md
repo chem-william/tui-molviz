@@ -46,6 +46,8 @@ fn render(frame: &mut Frame<'_>) {
 }
 ```
 
+Bonds are perceived from interatomic distances and drawn by their order — single, double, and triple bonds render as one, two, or three parallel lines. Set explicit orders with `Bond::with_order` when perception isn't precise enough (e.g. aromatic rings).
+
 For a larger interactive example with rotation and zoom:
 
 ```sh

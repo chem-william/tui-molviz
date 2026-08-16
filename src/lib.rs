@@ -45,7 +45,7 @@ pub mod molecule;
 use std::collections::HashSet;
 
 use crate::camera::Camera;
-use crate::molecule::Molecule;
+use crate::molecule::{BondOrder, Molecule};
 
 pub use mendeleev::Color as CpkColor;
 pub use mendeleev::Element;
@@ -341,6 +341,14 @@ impl MoleculeVisualizer<'_> {
         g: 120,
         b: 120,
     };
+    /// Perpendicular offset, in braille dots, of the extra lines a double or
+    /// triple bond gets from the bond axis. Kept below the minimum atom disk
+    /// radius so the line ends stay hidden under the atom disks.
+    const BOND_PARALLEL_OFFSET_DOTS: f64 = 0.75;
+    /// Projected bond lengths below this (in braille dots) are drawn as a
+    /// single line: the bond points almost at the viewer, so a perpendicular
+    /// offset is just noise.
+    const BOND_MIN_PARALLEL_LENGTH_DOTS: f64 = 2.0;
     /// Fallback marker color when the highlight style has no foreground set.
     const DEFAULT_HIGHLIGHT_COLOR: ratatui::style::Color = ratatui::style::Color::White;
     /// Gap, in braille dots, between an atom's drawn disk and its highlight ring.
@@ -471,20 +479,58 @@ impl MoleculeVisualizer<'_> {
         // Nearer atoms are brighter.
         let depth = |z: f64| Self::depth_factor(z, zmin, zspan);
 
-        let bond_lines: Vec<(f64, f64, f64, f64, ratatui::style::Color)> = if self.show_bonds {
-            // Bonds split at their midpoint so each half takes its own atom's depth.
-            self.molecule
-                .bonds()
-                .iter()
-                .map(|&bond| {
-                    let (s, e) = (bond.start().get(), bond.end().get());
-                    let color = Self::shade(
-                        Self::BOND_COLOR,
-                        depth(f64::midpoint(proj_depths[s], proj_depths[e])),
-                    );
-                    (proj[s].0, proj[s].1, proj[e].0, proj[e].1, color)
-                })
-                .collect()
+        // One braille dot, in world units.
+        let dot = 1.0 / canvas.dpu;
+
+        // Bonds as lines between the projected atom centers, each drawn in the
+        // bond color shaded at the midpoint of the two atoms' depths. Double
+        // and triple bonds get one or two extra lines parallel to the bond
+        // axis; all bond lines are drawn before the atoms, so the atom disks
+        // still occlude the bond ends.
+        let bond_lines: Vec<CanvasLine> = if self.show_bonds {
+            let mut lines = Vec::new();
+            for &bond in self.molecule.bonds() {
+                let (s, e) = (bond.start().get(), bond.end().get());
+                let color = Self::shade(
+                    Self::BOND_COLOR,
+                    depth(f64::midpoint(proj_depths[s], proj_depths[e])),
+                );
+                let (x1, y1) = (proj[s].0, proj[s].1);
+                let (x2, y2) = (proj[e].0, proj[e].1);
+                let (dx, dy) = (x2 - x1, y2 - y1);
+                let len = (dx * dx + dy * dy).sqrt();
+                let order = bond.order();
+
+                // When the bond points almost at the viewer (projected length
+                // below a couple of dots) a perpendicular offset is noise, so
+                // it collapses to a single line.
+                let parallel = len >= Self::BOND_MIN_PARALLEL_LENGTH_DOTS * dot;
+                if parallel && order != BondOrder::Single {
+                    let off = Self::BOND_PARALLEL_OFFSET_DOTS * dot;
+                    let (nx, ny) = (-dy / len * off, dx / len * off);
+                    for (ox, oy) in [(nx, ny), (-nx, -ny)] {
+                        lines.push(CanvasLine {
+                            x1: x1 + ox,
+                            y1: y1 + oy,
+                            x2: x2 + ox,
+                            y2: y2 + oy,
+                            color,
+                        });
+                    }
+                }
+                // A double bond's offset lines stand in for the axis; every
+                // other case keeps the central line.
+                if order != BondOrder::Double || !parallel {
+                    lines.push(CanvasLine {
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        color,
+                    });
+                }
+            }
+            lines
         } else {
             Vec::new()
         };
@@ -493,7 +539,6 @@ impl MoleculeVisualizer<'_> {
         // algorithm) by projected depth so nearer atoms occlude farther ones.
         // Consecutive atoms sharing a shaded color are merged into one Points
         // call to keep the draw count and the terminal's color escapes low.
-        let dot = 1.0 / canvas.dpu; // one braille dot, in world units
         let order = Self::back_to_front_order(&proj_depths);
 
         let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
@@ -525,14 +570,8 @@ impl MoleculeVisualizer<'_> {
             .x_bounds([-canvas.bx, canvas.bx])
             .y_bounds([-canvas.by, canvas.by])
             .paint(move |ctx| {
-                for &(x1, y1, x2, y2, color) in &bond_lines {
-                    ctx.draw(&CanvasLine {
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        color,
-                    });
+                for line in &bond_lines {
+                    ctx.draw(line);
                 }
 
                 for (color, pts) in &groups {
@@ -592,6 +631,20 @@ mod tests {
             .flat_map(|line| line.chars())
             .filter(|c| !c.is_whitespace())
             .count()
+    }
+
+    /// The number of braille dots lit, counting the bits inside each braille
+    /// cell rather than the cells themselves: a double bond's offset lines can
+    /// sit in a different dot row of the *same* cell as its single-bond
+    /// counterpart, which a cell count cannot see.
+    fn lit_dots(buffer: &Buffer) -> usize {
+        buffer_lines(buffer)
+            .iter()
+            .flat_map(|line| line.chars())
+            .filter_map(|c| u32::from(c).checked_sub(0x2800))
+            .filter(|pattern| *pattern < 0x100)
+            .map(|pattern| pattern.count_ones() as usize)
+            .sum()
     }
 
     fn render_to_buffer(viz: &MoleculeVisualizer<'_>) -> Buffer {
@@ -657,16 +710,18 @@ mod tests {
 
         let buffer = render_to_buffer(&viz);
 
+        // The diamond's edges perceive as double bonds, so each edge draws a
+        // pair of parallel lines.
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│      ⢀⣿⣿⣿⡿       │".to_string(),
-            "│ ⢀  ⢀⠔⠁  ⠁⠈⢆      │".to_string(),
-            "│⣿⣿⣿⣷⠁       ⠱⡀    │".to_string(),
-            "│⣿⣿⣿⣿⠁        ⠈⢆⣀⣀⣀│".to_string(),
-            "│⠉⠉⠉⠱⡀        ⢀⣿⣿⣿⣿│".to_string(),
-            "│    ⠈⢆       ⢀⢿⣿⣿⣿│".to_string(),
-            "│      ⠱⡀ ⡀ ⢀⠔⠁  ⠁ │".to_string(),
-            "│       ⣾⣿⣿⣿⠁      │".to_string(),
+            "│      ⣀⣿⣿⣿⣿       │".to_string(),
+            "│ ⢀  ⣠⠮⠊  ⠁⠣⡱⡀     │".to_string(),
+            "│⣿⣿⣿⣿⠁      ⠘⢌⢆    │".to_string(),
+            "│⣿⣿⣿⣿⠁       ⠈⢢⢱⣀⣀⣀│".to_string(),
+            "│⠉⠉⠉⢏⠢⡀       ⢀⣿⣿⣿⣿│".to_string(),
+            "│    ⠱⡑⡄      ⢀⣿⣿⣿⣿│".to_string(),
+            "│     ⠈⢎⢆ ⡀ ⡠⡲⠋  ⠁ │".to_string(),
+            "│       ⣿⣿⣿⣿⠉      │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -921,14 +976,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│               ⠱⡀ │".to_string(),
-            "│                ⠈⢆│".to_string(),
+            "│              ⠈⢎⢆ │".to_string(),
+            "│                ⠣⡣│".to_string(),
+            "│                 ⠑│".to_string(),
             "│                  │".to_string(),
             "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│                  │".to_string(),
-            "│⠱⡀                │".to_string(),
-            "│ ⠈⢆               │".to_string(),
+            "│⢄                 │".to_string(),
+            "│⢪⢢                │".to_string(),
+            "│ ⠱⡱⡀              │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -946,14 +1001,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│       ⢶⣾⣷⡶       │".to_string(),
-            "│        ⡇⣡⣧⣦⣤⡀    │".to_string(),
-            "│       ⢸⠠⣿⣿⣿⣿⡧    │".to_string(),
-            "│       ⡜ ⠻⢿⡿⠿⠃    │".to_string(),
-            "│    ⢠⣶⣾⣷⣦ ⡜       │".to_string(),
-            "│    ⢺⣿⣿⣿⣿⠂⡇       │".to_string(),
-            "│    ⠈⠛⠻⢻⠋⣸        │".to_string(),
-            "│       ⠾⢿⡿⠷       │".to_string(),
+            "│       ⢶⣾⣿⡶       │".to_string(),
+            "│       ⢀⢿⣹⣼⣦⣤⡀    │".to_string(),
+            "│       ⡸⡧⣿⣿⣿⣿⡧    │".to_string(),
+            "│      ⢀⢧⠃⠻⡿⡿⠿⠃    │".to_string(),
+            "│    ⢠⣶⣾⣾⣦⢠⢳⠁      │".to_string(),
+            "│    ⢺⣿⣿⣿⣿⢺⡎       │".to_string(),
+            "│    ⠈⠛⠻⡟⡏⣷⠁       │".to_string(),
+            "│       ⠾⣿⡿⠷       │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -973,14 +1028,14 @@ mod tests {
 
         let expected = vec![
             "┌──────────────────┐".to_string(),
-            "│      ⢀⣿⣿⣿⡿       │".to_string(),
-            "│ ⢀  ⢀⠔⠁  ⠁⠈⢆      │".to_string(),
-            "│⣿⣿⣿⣷⠁       ⠱⡀    │".to_string(),
-            "│⣿⣿⣿⣿⠁        ⠈⢆⣀⣀⣀│".to_string(),
-            "│⠉⠉⠉⠱⡀        ⢀⣿⣿⣿⣿│".to_string(),
-            "│    ⠈⢆       ⢀⢿⣿⣿⣿│".to_string(),
-            "│      ⠱⡀ ⡀ ⢀⠔⠁  ⠁ │".to_string(),
-            "│       ⣾⣿⣿⣿⠁      │".to_string(),
+            "│      ⣀⣿⣿⣿⣿       │".to_string(),
+            "│ ⢀  ⣠⠮⠊  ⠁⠣⡱⡀     │".to_string(),
+            "│⣿⣿⣿⣿⠁      ⠘⢌⢆    │".to_string(),
+            "│⣿⣿⣿⣿⠁       ⠈⢢⢱⣀⣀⣀│".to_string(),
+            "│⠉⠉⠉⢏⠢⡀       ⢀⣿⣿⣿⣿│".to_string(),
+            "│    ⠱⡑⡄      ⢀⣿⣿⣿⣿│".to_string(),
+            "│     ⠈⢎⢆ ⡀ ⡠⡲⠋  ⠁ │".to_string(),
+            "│       ⣿⣿⣿⣿⠉      │".to_string(),
             "└─────── C ────────┘".to_string(),
         ];
 
@@ -1001,5 +1056,128 @@ mod tests {
             mol.bonds()[0],
             Bond::new(AtomIndex::new(0), AtomIndex::new(1))
         );
+    }
+
+    /// A two-carbon molecule with an explicit bond `order`, the atoms `d` (Å)
+    /// apart along the x-axis.
+    fn diatomic(order: BondOrder, d: f64) -> Molecule {
+        Molecule::from_atoms_with_bonds(
+            [
+                Atom::new(Element::C, [0.0, 0.0, 0.0]),
+                Atom::new(Element::C, [d, 0.0, 0.0]),
+            ],
+            [Bond::new(AtomIndex::new(0), AtomIndex::new(1)).with_order(order)],
+        )
+    }
+
+    #[test]
+    fn higher_bond_orders_light_more_dots() {
+        let light = |order: BondOrder| {
+            let mol = diatomic(order, 1.34);
+            lit_dots(&render_to_buffer(&MoleculeVisualizer::new(&mol)))
+        };
+
+        let single = light(BondOrder::Single);
+        let double = light(BondOrder::Double);
+        let triple = light(BondOrder::Triple);
+
+        assert!(
+            double > single,
+            "a double bond ({double} dots) should light more than a single ({single})"
+        );
+        assert!(
+            triple > double,
+            "a triple bond ({triple} dots) should light more than a double ({double})"
+        );
+    }
+
+    #[test]
+    fn head_on_bond_renders_without_panic() {
+        // With the identity camera the viewing axis is world z, so a bond
+        // along z projects to a point — the degenerate case for parallel
+        // lines must collapse to a single line rather than panic.
+        let mol = Molecule::from_atoms_with_bonds(
+            [
+                Atom::new(Element::C, [0.0, 0.0, -0.67]),
+                Atom::new(Element::C, [0.0, 0.0, 0.67]),
+            ],
+            [Bond::new(AtomIndex::new(0), AtomIndex::new(1)).with_order(BondOrder::Double)],
+        );
+        let viz = MoleculeVisualizer::new(&mol).camera(Camera::new(0.0, 0.0, 1.0));
+
+        let buffer = render_to_buffer(&viz);
+        let expected = vec![
+            "┌──────────────────┐".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "│         ⡀        │".to_string(),
+            "│       ⣾⣿⣿⣷       │".to_string(),
+            "│      ⠈⢿⣿⣿⡿⠁      │".to_string(),
+            "│         ⠁        │".to_string(),
+            "│                  │".to_string(),
+            "│                  │".to_string(),
+            "└─────── C ────────┘".to_string(),
+        ];
+
+        assert_eq!(buffer_lines(&buffer), expected);
+    }
+
+    /// The showcase example's caffeine, kept in sync with
+    /// `examples/showcase.rs` so the feature is verified on the coordinates
+    /// the README gif actually renders.
+    fn caffeine() -> Molecule {
+        Molecule::from_atoms([
+            Atom::new(Element::C, [0.000, 1.402, 0.000]),
+            Atom::new(Element::N, [1.214, 0.701, 0.060]),
+            Atom::new(Element::C, [1.214, -0.701, -0.020]),
+            Atom::new(Element::N, [0.000, -1.402, 0.080]),
+            Atom::new(Element::C, [-1.214, -0.701, -0.030]),
+            Atom::new(Element::C, [-1.214, 0.701, 0.020]),
+            Atom::new(Element::O, [0.000, 2.620, -0.080]),
+            Atom::new(Element::O, [2.300, -1.290, 0.050]),
+            Atom::new(Element::N, [-2.420, -1.360, 0.060]),
+            Atom::new(Element::N, [2.420, 1.360, -0.050]),
+            Atom::new(Element::C, [-3.620, -0.600, -0.120]),
+            Atom::new(Element::C, [3.620, 0.600, 0.120]),
+            Atom::new(Element::C, [0.000, -2.820, -0.140]),
+            Atom::new(Element::H, [-4.460, -1.290, -0.030]),
+            Atom::new(Element::H, [-3.560, -0.170, -1.130]),
+            Atom::new(Element::H, [-3.760, 0.210, 0.610]),
+            Atom::new(Element::H, [4.460, 1.290, 0.030]),
+            Atom::new(Element::H, [3.560, 0.170, 1.130]),
+            Atom::new(Element::H, [3.760, -0.210, -0.610]),
+            Atom::new(Element::H, [-0.900, -3.390, -0.030]),
+            Atom::new(Element::H, [0.880, -3.400, 0.030]),
+            Atom::new(Element::H, [0.020, -2.930, -1.230]),
+        ])
+    }
+
+    #[test]
+    fn caffeine_carbonyls_perceive_as_double_bonds() {
+        let mol = caffeine();
+
+        let carbonyls = mol
+            .bonds()
+            .iter()
+            .filter(|bond| {
+                let (a, b) = (
+                    &mol.atoms()[bond.start().get()],
+                    &mol.atoms()[bond.end().get()],
+                );
+                (a.element() == Element::C && b.element() == Element::O)
+                    || (a.element() == Element::O && b.element() == Element::C)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(carbonyls.len(), 2, "expected exactly two C–O bonds");
+        for bond in carbonyls {
+            assert_eq!(
+                bond.order(),
+                BondOrder::Double,
+                "carbonyl bond {}–{} should be double",
+                bond.start(),
+                bond.end()
+            );
+        }
     }
 }
