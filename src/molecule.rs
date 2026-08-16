@@ -298,7 +298,7 @@ impl Molecule {
     /// summed covalent radii.
     ///
     /// The single-bond edge stays at 1.3 so every bond perceived before
-    /// bond orders existed is  still perceived, now as a single bond.
+    /// bond orders existed is still perceived, now as a single bond.
     const SINGLE_BOND_RATIO: f64 = 1.3;
     const DOUBLE_BOND_RATIO: f64 = 1.02;
     const TRIPLE_BOND_RATIO: f64 = 0.88;
@@ -332,15 +332,15 @@ impl Molecule {
             return None;
         }
         let r = d / sum_radii;
-        Some(if r <= Self::TRIPLE_BOND_RATIO {
-            BondOrder::Triple
+        if r <= Self::TRIPLE_BOND_RATIO {
+            Some(BondOrder::Triple)
         } else if r <= Self::DOUBLE_BOND_RATIO {
-            BondOrder::Double
+            Some(BondOrder::Double)
         } else if r <= Self::SINGLE_BOND_RATIO {
-            BondOrder::Single
+            Some(BondOrder::Single)
         } else {
-            return None;
-        })
+            None
+        }
     }
 
     fn recenter(atoms: &mut [Atom]) {

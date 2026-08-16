@@ -500,6 +500,15 @@ impl MoleculeVisualizer<'_> {
                 let (dx, dy) = (x2 - x1, y2 - y1);
                 let len = (dx * dx + dy * dy).sqrt();
                 let order = bond.order();
+                let mut push_line = |ax, ay, bx, by| {
+                    lines.push(CanvasLine {
+                        x1: ax,
+                        y1: ay,
+                        x2: bx,
+                        y2: by,
+                        color,
+                    });
+                };
 
                 // When the bond points almost at the viewer (projected length
                 // below a couple of dots) a perpendicular offset is noise, so
@@ -509,25 +518,13 @@ impl MoleculeVisualizer<'_> {
                     let off = Self::BOND_PARALLEL_OFFSET_DOTS * dot;
                     let (nx, ny) = (-dy / len * off, dx / len * off);
                     for (ox, oy) in [(nx, ny), (-nx, -ny)] {
-                        lines.push(CanvasLine {
-                            x1: x1 + ox,
-                            y1: y1 + oy,
-                            x2: x2 + ox,
-                            y2: y2 + oy,
-                            color,
-                        });
+                        push_line(x1 + ox, y1 + oy, x2 + ox, y2 + oy);
                     }
                 }
                 // A double bond's offset lines stand in for the axis; every
                 // other case keeps the central line.
                 if order != BondOrder::Double || !parallel {
-                    lines.push(CanvasLine {
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        color,
-                    });
+                    push_line(x1, y1, x2, y2);
                 }
             }
             lines
@@ -703,16 +700,10 @@ mod tests {
         assert_eq!(no_highlight, out_of_range);
     }
 
-    #[test]
-    fn mol_gets_drawn() {
-        let mol = create_molecule();
-        let viz = MoleculeVisualizer::new(&mol).show_bonds(true);
-
-        let buffer = render_to_buffer(&viz);
-
-        // The diamond's edges perceive as double bonds, so each edge draws a
-        // pair of parallel lines.
-        let expected = vec![
+    /// The default [`create_molecule`] diamond's expected buffer. Its edges
+    /// perceive as double bonds, so each edge draws a pair of parallel lines.
+    fn diamond_expected() -> Vec<String> {
+        vec![
             "┌──────────────────┐".to_string(),
             "│      ⣀⣿⣿⣿⣿       │".to_string(),
             "│ ⢀  ⣠⠮⠊  ⠁⠣⡱⡀     │".to_string(),
@@ -723,9 +714,17 @@ mod tests {
             "│     ⠈⢎⢆ ⡀ ⡠⡲⠋  ⠁ │".to_string(),
             "│       ⣿⣿⣿⣿⠉      │".to_string(),
             "└─────── C ────────┘".to_string(),
-        ];
+        ]
+    }
 
-        assert_eq!(buffer_lines(&buffer), expected);
+    #[test]
+    fn mol_gets_drawn() {
+        let mol = create_molecule();
+        let viz = MoleculeVisualizer::new(&mol).show_bonds(true);
+
+        let buffer = render_to_buffer(&viz);
+
+        assert_eq!(buffer_lines(&buffer), diamond_expected());
     }
 
     #[test]
@@ -1026,20 +1025,7 @@ mod tests {
         viz.camera.reset();
         let buffer = render_to_buffer(&viz);
 
-        let expected = vec![
-            "┌──────────────────┐".to_string(),
-            "│      ⣀⣿⣿⣿⣿       │".to_string(),
-            "│ ⢀  ⣠⠮⠊  ⠁⠣⡱⡀     │".to_string(),
-            "│⣿⣿⣿⣿⠁      ⠘⢌⢆    │".to_string(),
-            "│⣿⣿⣿⣿⠁       ⠈⢢⢱⣀⣀⣀│".to_string(),
-            "│⠉⠉⠉⢏⠢⡀       ⢀⣿⣿⣿⣿│".to_string(),
-            "│    ⠱⡑⡄      ⢀⣿⣿⣿⣿│".to_string(),
-            "│     ⠈⢎⢆ ⡀ ⡠⡲⠋  ⠁ │".to_string(),
-            "│       ⣿⣿⣿⣿⠉      │".to_string(),
-            "└─────── C ────────┘".to_string(),
-        ];
-
-        assert_eq!(buffer_lines(&buffer), expected);
+        assert_eq!(buffer_lines(&buffer), diamond_expected());
     }
 
     #[test]
