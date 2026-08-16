@@ -430,6 +430,65 @@ impl MoleculeVisualizer<'_> {
         )
     }
 
+    /// The canvas lines for every bond, in the bond color shaded at the
+    /// midpoint of the bonded atoms' depths. Single bonds are one line; double
+    /// and triple bonds get one or two extra lines parallel to the bond axis.
+    /// Empty when bonds are hidden.
+    fn bond_lines(
+        &self,
+        proj: &[(f64, f64, f64)],
+        canvas: &MoleculeCanvas,
+        zmin: f64,
+        zspan: f64,
+    ) -> Vec<CanvasLine> {
+        if !self.show_bonds {
+            return Vec::new();
+        }
+
+        // One braille dot, in world units.
+        let dot = 1.0 / canvas.dpu;
+        let mut lines = Vec::with_capacity(self.molecule.bonds().len() * 3);
+        for &bond in self.molecule.bonds() {
+            let (s, e) = (bond.start().get(), bond.end().get());
+            let color = Self::shade(
+                Self::BOND_COLOR,
+                Self::depth_factor(f64::midpoint(proj[s].2, proj[e].2), zmin, zspan),
+            );
+            let (x1, y1) = (proj[s].0, proj[s].1);
+            let (x2, y2) = (proj[e].0, proj[e].1);
+            let (dx, dy) = (x2 - x1, y2 - y1);
+            let len = (dx * dx + dy * dy).sqrt();
+            let order = bond.order();
+            let mut push_line = |ax, ay, bx, by| {
+                lines.push(CanvasLine {
+                    x1: ax,
+                    y1: ay,
+                    x2: bx,
+                    y2: by,
+                    color,
+                });
+            };
+
+            // When the bond points almost at the viewer (projected length
+            // below a couple of dots) a perpendicular offset is noise, so
+            // it collapses to a single line.
+            let parallel = len >= Self::BOND_MIN_PARALLEL_LENGTH_DOTS * dot;
+            if parallel && order != BondOrder::Single {
+                let off = Self::BOND_PARALLEL_OFFSET_DOTS * dot;
+                let (nx, ny) = (-dy / len * off, dx / len * off);
+                for (ox, oy) in [(nx, ny), (-nx, -ny)] {
+                    push_line(x1 + ox, y1 + oy, x2 + ox, y2 + oy);
+                }
+            }
+            // A double bond's offset lines stand in for the axis; every
+            // other case keeps the central line.
+            if order != BondOrder::Double || !parallel {
+                push_line(x1, y1, x2, y2);
+            }
+        }
+        lines
+    }
+
     /// Sets the widget style, draws the optional block, and renders the molecule
     /// into the inner area. Returns the canvas mapping used, for hit-testing.
     fn render_inner(&self, area: Rect, buf: &mut Buffer) -> MoleculeCanvas {
@@ -482,55 +541,9 @@ impl MoleculeVisualizer<'_> {
         // One braille dot, in world units.
         let dot = 1.0 / canvas.dpu;
 
-        // Bonds as lines between the projected atom centers, each drawn in the
-        // bond color shaded at the midpoint of the two atoms' depths. Double
-        // and triple bonds get one or two extra lines parallel to the bond
-        // axis; all bond lines are drawn before the atoms, so the atom disks
-        // still occlude the bond ends.
-        let bond_lines: Vec<CanvasLine> = if self.show_bonds {
-            let mut lines = Vec::new();
-            for &bond in self.molecule.bonds() {
-                let (s, e) = (bond.start().get(), bond.end().get());
-                let color = Self::shade(
-                    Self::BOND_COLOR,
-                    depth(f64::midpoint(proj_depths[s], proj_depths[e])),
-                );
-                let (x1, y1) = (proj[s].0, proj[s].1);
-                let (x2, y2) = (proj[e].0, proj[e].1);
-                let (dx, dy) = (x2 - x1, y2 - y1);
-                let len = (dx * dx + dy * dy).sqrt();
-                let order = bond.order();
-                let mut push_line = |ax, ay, bx, by| {
-                    lines.push(CanvasLine {
-                        x1: ax,
-                        y1: ay,
-                        x2: bx,
-                        y2: by,
-                        color,
-                    });
-                };
-
-                // When the bond points almost at the viewer (projected length
-                // below a couple of dots) a perpendicular offset is noise, so
-                // it collapses to a single line.
-                let parallel = len >= Self::BOND_MIN_PARALLEL_LENGTH_DOTS * dot;
-                if parallel && order != BondOrder::Single {
-                    let off = Self::BOND_PARALLEL_OFFSET_DOTS * dot;
-                    let (nx, ny) = (-dy / len * off, dx / len * off);
-                    for (ox, oy) in [(nx, ny), (-nx, -ny)] {
-                        push_line(x1 + ox, y1 + oy, x2 + ox, y2 + oy);
-                    }
-                }
-                // A double bond's offset lines stand in for the axis; every
-                // other case keeps the central line.
-                if order != BondOrder::Double || !parallel {
-                    push_line(x1, y1, x2, y2);
-                }
-            }
-            lines
-        } else {
-            Vec::new()
-        };
+        // Bond lines are drawn before the atoms, so the atom disks still
+        // occlude the bond ends.
+        let bond_lines = self.bond_lines(&proj, &canvas, zmin, zspan);
 
         // Atoms as small screen-space disks, drawn back-to-front (painter's
         // algorithm) by projected depth so nearer atoms occlude farther ones.
@@ -630,6 +643,9 @@ mod tests {
             .count()
     }
 
+    /// Unicode codepoint of the first braille cell (`⠂` is the offset from it).
+    const BRAILLE_BASE: u32 = 0x2800;
+
     /// The number of braille dots lit, counting the bits inside each braille
     /// cell rather than the cells themselves: a double bond's offset lines can
     /// sit in a different dot row of the *same* cell as its single-bond
@@ -638,7 +654,7 @@ mod tests {
         buffer_lines(buffer)
             .iter()
             .flat_map(|line| line.chars())
-            .filter_map(|c| u32::from(c).checked_sub(0x2800))
+            .filter_map(|c| u32::from(c).checked_sub(BRAILLE_BASE))
             .filter(|pattern| *pattern < 0x100)
             .map(|pattern| pattern.count_ones() as usize)
             .sum()
@@ -1150,8 +1166,10 @@ mod tests {
                     &mol.atoms()[bond.start().get()],
                     &mol.atoms()[bond.end().get()],
                 );
-                (a.element() == Element::C && b.element() == Element::O)
-                    || (a.element() == Element::O && b.element() == Element::C)
+                matches!(
+                    (a.element(), b.element()),
+                    (Element::C, Element::O) | (Element::O, Element::C)
+                )
             })
             .collect::<Vec<_>>();
 
