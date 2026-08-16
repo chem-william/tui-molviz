@@ -258,7 +258,7 @@ impl Bond {
 }
 
 impl From<(usize, usize)> for Bond {
-    /// Converts a `(start, end)` pair of raw positions into a single [`Bond`].
+    /// Converts a `(start, end)` pair of raw positions into a [`Bond`].
     fn from((start, end): (usize, usize)) -> Self {
         Self::new(AtomIndex::from(start), AtomIndex::from(end))
     }
