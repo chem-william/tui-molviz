@@ -48,7 +48,9 @@ fn render(frame: &mut Frame<'_>) {
 
 Bonds are perceived from interatomic distances and drawn by their order - single, double, and triple bonds render as one, two, or three parallel lines. Set explicit orders with `Bond::with_order` when perception isn't precise enough (e.g. aromatic rings).
 
-For a larger interactive example with rotation and zoom:
+The camera can be rotated (`Camera::rotate`), zoomed (`Camera::zoom_by`), and panned (`Camera::translate`). Hit-test terminal cells back to atoms with `MoleculeCanvas::pick_atom` for selection.
+
+For a larger interactive example with rotation, zoom, and panning:
 
 ```sh
 cargo run --example showcase
