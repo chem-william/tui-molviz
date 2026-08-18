@@ -448,8 +448,14 @@ impl MoleculeVisualizer<'_> {
         Line::from(spans).centered()
     }
 
-    fn depth_factor(z: f64, zmin: f64, zspan: f64) -> f64 {
-        Self::MIN_DEPTH_BRIGHTNESS + Self::DEPTH_BRIGHTNESS_RANGE * ((z - zmin) / zspan)
+    const fn shade_depth(z: f64, zmin: f64, zmax: f64) -> f64 {
+        let zspan = (zmax - zmin).max(1e-5);
+        let flat = zspan <= 1e-5;
+        if flat {
+            1.0
+        } else {
+            Self::MIN_DEPTH_BRIGHTNESS + Self::DEPTH_BRIGHTNESS_RANGE * ((z - zmin) / zspan)
+        }
     }
 
     fn back_to_front_order(depths: &[f64]) -> Vec<usize> {
@@ -480,7 +486,7 @@ impl MoleculeVisualizer<'_> {
         proj: &[(f64, f64, f64)],
         canvas: &MoleculeCanvas,
         zmin: f64,
-        zspan: f64,
+        zmax: f64,
     ) -> Vec<CanvasLine> {
         if !self.show_bonds {
             return Vec::new();
@@ -493,7 +499,8 @@ impl MoleculeVisualizer<'_> {
             let (s, e) = (bond.start().get(), bond.end().get());
             let color = Self::shade(
                 Self::BOND_COLOR,
-                Self::depth_factor(f64::midpoint(proj[s].2, proj[e].2), zmin, zspan),
+                // Nearer bonds are brighter
+                Self::shade_depth(f64::midpoint(proj[s].2, proj[e].2), zmin, zmax),
             );
             let (x1, y1) = (proj[s].0, proj[s].1);
             let (x2, y2) = (proj[e].0, proj[e].1);
@@ -575,16 +582,13 @@ impl MoleculeVisualizer<'_> {
             .iter()
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
-        let zspan = (zmax - zmin).max(1e-6);
-        // Nearer atoms are brighter.
-        let depth = |z: f64| Self::depth_factor(z, zmin, zspan);
 
         // One braille dot, in world units.
         let dot = 1.0 / canvas.dpu;
 
         // Bond lines are drawn before the atoms, so the atom disks still
         // occlude the bond ends.
-        let bond_lines = self.bond_lines(&proj, &canvas, zmin, zspan);
+        let bond_lines = self.bond_lines(&proj, &canvas, zmin, zmax);
 
         // Atoms as small screen-space disks, drawn back-to-front (painter's
         // algorithm) by projected depth so nearer atoms occlude farther ones.
@@ -595,7 +599,8 @@ impl MoleculeVisualizer<'_> {
         let mut groups: Vec<(ratatui::style::Color, Vec<(f64, f64)>)> = Vec::new();
         for i in order {
             let atom = &self.molecule.atoms()[i];
-            let color = Self::shade(atom.cpk(), depth(proj_depths[i]));
+            // Nearer atoms are brighter.
+            let color = Self::shade(atom.cpk(), Self::shade_depth(proj_depths[i], zmin, zmax));
             if groups.last().map(|(c, _)| *c) != Some(color) {
                 groups.push((color, Vec::new()));
             }
@@ -933,18 +938,18 @@ mod tests {
             "└─────── N ────────┘",
         ]);
 
-        expected[(10, 3)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(8, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(9, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(10, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(11, 4)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(7, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(8, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(9, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(10, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(11, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(12, 5)].set_fg(Color::Rgb(57, 57, 102));
-        expected[(10, 6)].set_fg(Color::Rgb(57, 57, 102));
+        expected[(10, 3)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(8, 4)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(9, 4)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(10, 4)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(11, 4)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(7, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(8, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(9, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(10, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(11, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(12, 5)].set_fg(Color::Rgb(143, 143, 255));
+        expected[(10, 6)].set_fg(Color::Rgb(143, 143, 255));
         for col in [8, 9, 10] {
             expected[(col, 9)].set_style(
                 Style::default()
@@ -966,9 +971,14 @@ mod tests {
     #[test]
     fn depth_factor_brightens_nearer_depths() {
         assert!(
-            MoleculeVisualizer::depth_factor(2.0, -1.0, 3.0)
-                > MoleculeVisualizer::depth_factor(-1.0, -1.0, 3.0)
+            MoleculeVisualizer::shade_depth(2.0, -1.0, 3.0)
+                > MoleculeVisualizer::shade_depth(-1.0, -1.0, 3.0)
         );
+    }
+
+    #[test]
+    fn dont_shade_no_depth() {
+        assert_eq!(MoleculeVisualizer::shade_depth(1.0, 1.0, 1.000001), 1.0);
     }
 
     fn atom(x: f64, y: f64, z: f64) -> Atom {
