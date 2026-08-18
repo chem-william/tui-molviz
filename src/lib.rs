@@ -201,6 +201,7 @@ impl MoleculeVisualizerState {
     }
 }
 
+/// A compact widget for displaying atoms and molecules.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MoleculeVisualizer<'a> {
     /// The molecule to visualize
