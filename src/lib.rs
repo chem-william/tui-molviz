@@ -1008,6 +1008,54 @@ mod tests {
     }
 
     #[test]
+    fn cell_to_data_maps_cells_to_the_canvas_bounds() {
+        let canvas = MoleculeCanvas::new(Rect::new(2, 3, 20, 10), 1.0, 1.0);
+        let by = MoleculeCanvas::EDGE_PADDING;
+        let bx = by; // 20x10 packs 2 dots/cell across and 4 down, a square grid
+
+        // The top-left cell's center samples near (-bx, by); the bottom-right
+        // cell's near (bx, -by).
+        let (x, y) = canvas.cell_to_data((2, 3)).unwrap();
+        assert!((x + bx - 0.5 * 2.0 * bx / 20.0).abs() < 1e-9);
+        assert!((y - by + 0.5 * 2.0 * by / 10.0).abs() < 1e-9);
+        let (x, y) = canvas.cell_to_data((21, 12)).unwrap();
+        assert!((x - bx + 0.5 * 2.0 * bx / 20.0).abs() < 1e-9);
+        assert!((y + by - 0.5 * 2.0 * by / 10.0).abs() < 1e-9);
+
+        // Cells outside the canvas area are rejected.
+        assert_eq!(canvas.cell_to_data((1, 3)), None);
+        assert_eq!(canvas.cell_to_data((22, 3)), None);
+    }
+
+    #[test]
+    fn panning_moves_the_atom_by_the_same_cells() {
+        // The user-facing round trip: a click hit-tests, a drag converts cell
+        // deltas to world units, and the next click lands where the molecule
+        // moved to.
+        let molecule: Molecule = vec![atom(0.0, 0.0, 0.0)].into_iter().collect();
+        let camera = Camera::new(0.0, 0.0, 1.0);
+        // Odd dimensions so cell (10, 5) is exactly centered on the origin.
+        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 21, 11), molecule.radius(), 1.0);
+
+        let (cx, cy) = (10, 5);
+        assert_eq!(
+            canvas.pick_atom(camera, &molecule, (cx, cy)),
+            Some(AtomIndex::new(0))
+        );
+
+        // Drag 2 cells right, 1 cell down.
+        let mut panned = camera;
+        let (dx, dy) = canvas.cell_delta_to_world(2, 1);
+        panned.translate(dx, dy);
+
+        assert_eq!(
+            canvas.pick_atom(panned, &molecule, (cx + 2, cy + 1)),
+            Some(AtomIndex::new(0))
+        );
+        assert_eq!(canvas.pick_atom(panned, &molecule, (cx, cy)), None);
+    }
+
+    #[test]
     fn canvas_reports_whether_a_cell_is_inside_its_area() {
         let canvas = MoleculeCanvas::new(Rect::new(2, 3, 5, 4), 1.0, 1.0);
 
