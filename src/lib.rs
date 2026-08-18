@@ -37,7 +37,7 @@
 //!
 //! # Examples
 //!
-//! * `examples/quickstart.rs` is a simple example plotting a small organic molecule.
+//! * `examples/quickstart.rs` is a simple example plotting a water molecule.
 //! * `examples/showcase.rs` is a more complex example that showcases zoom, rotation, and selection of atoms
 
 pub mod camera;
