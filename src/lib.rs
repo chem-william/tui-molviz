@@ -449,6 +449,8 @@ impl MoleculeVisualizer<'_> {
         Line::from(spans).centered()
     }
 
+    // The depth is clamped so that if a single atom or a molecule lies flat
+    // on the screen, it will not be dimmed at all.
     const fn shade_depth(z: f64, zmin: f64, zmax: f64) -> f64 {
         let zspan = (zmax - zmin).max(1e-5);
         let flat = zspan <= 1e-5;
