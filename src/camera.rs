@@ -209,19 +209,11 @@ fn wrap_angle(angle: f64) -> f64 {
 mod tests {
     use super::*;
 
-    fn camera(yaw: f64, pitch: f64) -> Camera {
-        Camera {
-            yaw,
-            pitch,
-            zoom: 1.0,
-            tx: 0.0,
-            ty: 0.0,
-        }
-    }
+    const ZOOM: f64 = 1.0;
 
     #[test]
     fn yaw_wraps_to_an_equivalent_angle() {
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         cam.rotate(TAU + 0.5, 0.0);
 
         assert!((cam.yaw() - 0.5).abs() < 1e-12);
@@ -230,7 +222,7 @@ mod tests {
 
     #[test]
     fn yaw_wraps_downwards_too() {
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         cam.rotate(-TAU - 0.5, 0.0);
 
         assert!((cam.yaw + 0.5).abs() < 1e-12);
@@ -239,7 +231,7 @@ mod tests {
     #[test]
     fn full_yaw_turn_projects_identically() {
         let point = (1.0, 2.0, 3.0);
-        let mut cam = camera(0.6, 0.4);
+        let mut cam = Camera::new(0.6, 0.4, ZOOM);
         let before = cam.project_point(point.0, point.1, point.2);
 
         cam.rotate(TAU, 0.0);
@@ -252,7 +244,7 @@ mod tests {
 
     #[test]
     fn pitch_wraps_and_keeps_tumbling() {
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         cam.rotate(0.0, TAU + 0.5);
 
         assert!((cam.pitch - 0.5).abs() < 1e-12);
@@ -261,7 +253,7 @@ mod tests {
 
     #[test]
     fn a_half_turn_of_pitch_shows_the_backside() {
-        let cam = camera(0.0, PI);
+        let cam = Camera::new(0.0, PI, ZOOM);
         // The atom behind the origin now faces the viewer, and the one in front
         // is occluded — the backside, not a broken depth sort.
         assert!(cam.project_point(0.0, 0.0, -1.0).2 > cam.project_point(0.0, 0.0, 1.0).2);
@@ -270,7 +262,7 @@ mod tests {
     #[test]
     fn a_full_pitch_tumble_returns_to_the_start() {
         let point = (1.0, 2.0, 3.0);
-        let start = camera(0.6, 0.4);
+        let start = Camera::new(0.6, 0.4, ZOOM);
         let mut cam = start;
 
         // Step over both poles rather than jumping, so pitch has to wrap all the
@@ -288,11 +280,11 @@ mod tests {
 
     #[test]
     fn translate_shifts_projection_in_xy_not_z() {
-        let mut cam = camera(0.6, 0.4);
+        let mut cam = Camera::new(0.6, 0.4, ZOOM);
         cam.translate(0.5, -0.25);
 
         let (x, y, z) = cam.project_point(1.0, 2.0, 3.0);
-        let (x0, y0, z0) = camera(0.6, 0.4).project_point(1.0, 2.0, 3.0);
+        let (x0, y0, z0) = Camera::new(0.6, 0.4, ZOOM).project_point(1.0, 2.0, 3.0);
 
         assert!((x - x0 - 0.5).abs() < 1e-12);
         assert!((y - y0 + 0.25).abs() < 1e-12);
@@ -301,7 +293,7 @@ mod tests {
 
     #[test]
     fn translate_accumulates_and_is_reported() {
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
 
         assert_eq!(cam.offset(), (0.0, 0.0));
 
@@ -313,7 +305,7 @@ mod tests {
 
     #[test]
     fn reset_clears_the_offset() {
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         cam.translate(1.0, 2.0);
         cam.rotate(0.5, -0.5);
         cam.zoom_by(3.0);
@@ -326,7 +318,7 @@ mod tests {
 
     #[test]
     fn recenter_clears_only_the_offset() {
-        let mut cam = camera(0.3, 0.7);
+        let mut cam = Camera::new(0.3, 0.7, ZOOM);
         cam.translate(1.0, -2.0);
         cam.zoom_by(2.0);
 
@@ -342,7 +334,7 @@ mod tests {
     fn pan_then_rotate_keeps_the_panned_center() {
         // Panning moves the molecule, and a later rotation orbits around the
         // panned center: the centroid stays at the offset, wherever it points.
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         cam.translate(0.8, -0.4);
 
         for _ in 0..40 {
@@ -363,7 +355,7 @@ mod tests {
 
     #[test]
     fn zoom_around_keeps_the_cursor_cell_fixed() {
-        let mut cam = camera(0.6, 0.4);
+        let mut cam = Camera::new(0.6, 0.4, ZOOM);
         cam.translate(0.3, -0.2);
         let cursor = cam.project_point(1.0, 2.0, 3.0);
         let (half_width, zoom) = (2.0, cam.zoom());
@@ -386,8 +378,8 @@ mod tests {
 
     #[test]
     fn zoom_around_at_origin_is_zoom_by() {
-        let mut cam = camera(0.6, 0.4);
-        let mut reference = camera(0.6, 0.4);
+        let mut cam = Camera::new(0.6, 0.4, ZOOM);
+        let mut reference = Camera::new(0.6, 0.4, ZOOM);
 
         cam.zoom_around(2.5, (0.0, 0.0));
         reference.zoom_by(2.5);
@@ -399,7 +391,7 @@ mod tests {
     fn yaw_turns_the_same_way_at_every_pitch() {
         // Whichever face is towards the viewer, a positive yaw must sweep it in
         // one consistent screen direction; upside-down used to reverse it.
-        let mut cam = camera(0.0, 0.0);
+        let mut cam = Camera::new(0.0, 0.0, ZOOM);
         for _ in 0..200 {
             cam.rotate(0.0, 0.1);
 
