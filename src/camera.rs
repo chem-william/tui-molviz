@@ -77,12 +77,12 @@ impl Camera {
     /// pitching all the way over the top brings the view back around to where it
     /// started.
     ///
-    /// Yaw is applied in screen terms rather than about the fixed world axis.
-    /// Past the poles the camera hangs upside-down, and a world-axis yaw then
-    /// sweeps the atoms now facing the viewer the other way — pressing "left"
-    /// would visibly turn the molecule right. Negating the delta while inverted
-    /// keeps "left" meaning left all the way around.
     pub fn rotate(&mut self, yaw_delta: f64, pitch_delta: f64) {
+        // Yaw is applied in screen terms rather than about the fixed world axis.
+        // Past the poles the camera hangs upside-down, and a world-axis yaw then
+        // sweeps the atoms now facing the viewer the other way — pressing "left"
+        // would visibly turn the molecule right. Negating the delta while inverted
+        // keeps "left" meaning left all the way around.
         let yaw_delta = if self.is_inverted() {
             -yaw_delta
         } else {
@@ -99,10 +99,9 @@ impl Camera {
         self.pitch.cos() < 0.0
     }
 
-    /// Shifts the view by `dx` right and `dy` up, in the same units as atom
-    /// coordinates (Å). The offset lives in the screen plane, applied after
-    /// the rotation, so panning and then rotating orbits around the panned
-    /// center.
+    /// Shifts the view by `dx` right and `dy` up, in units of atom coordinates (Å).
+    /// The offset lives in the screen plane, applied after the rotation, so panning
+    /// and then rotating orbits around the panned center.
     ///
     /// To pan by terminal cells, convert them with
     /// [`MoleculeCanvas::cell_delta_to_world`](crate::MoleculeCanvas::cell_delta_to_world),
@@ -128,7 +127,7 @@ impl Camera {
         self.ty += dy;
     }
 
-    /// The current screen offset (right, up), in the same units as atom
+    /// The current screen offset (right, up), in units of atom
     /// coordinates (Å). `offset()` of a fresh camera is `(0.0, 0.0)`.
     #[must_use]
     pub fn offset(self) -> (f64, f64) {
