@@ -135,7 +135,7 @@ impl Camera {
     }
 
     pub fn zoom_by(&mut self, factor: f64) {
-        self.zoom = Camera::clamp_zoom(self.zoom * factor);
+        self.zoom_around(factor, (0.0, 0.0));
     }
 
     /// Zooms by `factor` while keeping the point under the cursor stationary
