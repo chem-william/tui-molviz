@@ -26,8 +26,9 @@ impl Default for Camera {
 }
 
 impl Camera {
+    #[allow(clippy::manual_clamp)]
     fn clamp_zoom(zoom: f64) -> f64 {
-        zoom.clamp(0.1, 100.0)
+        zoom.max(0.1).min(100.0)
     }
 
     /// Creates a new [`Self`] where `zoom` is clamped to [0.1, 100]
