@@ -90,8 +90,14 @@ impl MoleculeCanvas {
     /// [`MoleculeVisualizerState::canvas`], but construct it directly when
     /// hit-testing without rendering — `radius` and `zoom` must match what
     /// the drawn frame used.
+    ///
+    /// # Panic
+    ///
+    /// Panics if either `radius` is not [finite](f64::is_finite) or if `zoom <= 0.0`.
     #[must_use]
     pub fn new(inner: Rect, radius: f64, zoom: f64) -> Self {
+        assert!(radius.is_finite(), "radius must be finite");
+        assert!(zoom > 0.0, "zoom must be positive");
         let w = f64::from(inner.width.max(1));
         let h = f64::from(inner.height.max(1));
         let (rx, ry) = (2.0 * w, 4.0 * h);
