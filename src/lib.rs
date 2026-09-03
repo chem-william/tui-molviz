@@ -102,9 +102,11 @@ impl MoleculeCanvas {
     }
 
     /// Drawn radius of an atom, in braille dots.
+    #[allow(clippy::manual_clamp)]
     fn atom_radius_dots(&self, cov: f64) -> f64 {
         (cov * Self::ATOM_RADIUS_SCALE * self.dpu)
-            .clamp(Self::MIN_ATOM_RADIUS_DOTS, Self::MAX_ATOM_RADIUS_DOTS)
+            .max(Self::MIN_ATOM_RADIUS_DOTS)
+            .min(Self::MAX_ATOM_RADIUS_DOTS)
     }
 
     /// Inverse of the canvas mapping: the [`AtomIndex`] of the atom whose drawn
