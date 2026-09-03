@@ -38,7 +38,7 @@
 //! # Examples
 //!
 //! * `examples/quickstart.rs` is a simple example plotting a water molecule.
-//! * `examples/showcase.rs` is a more complex example that showcases zoom, rotation, and selection of atoms
+//! * `examples/showcase.rs` is a more complex example that showcases zoom, rotation, panning, and selection of atoms
 
 pub mod camera;
 pub mod molecule;
@@ -85,7 +85,13 @@ impl MoleculeCanvas {
 
     /// Fits a molecule of the given radius into `inner` at the camera's zoom.
     /// Braille packs 2 dots per cell across and 4 down.
-    fn new(inner: Rect, radius: f64, zoom: f64) -> Self {
+    ///
+    /// Normally obtained from a stateful render via
+    /// [`MoleculeVisualizerState::canvas`], but construct it directly when
+    /// hit-testing without rendering — `radius` and `zoom` must match what
+    /// the drawn frame used.
+    #[must_use]
+    pub fn new(inner: Rect, radius: f64, zoom: f64) -> Self {
         let w = f64::from(inner.width.max(1));
         let h = f64::from(inner.height.max(1));
         let (rx, ry) = (2.0 * w, 4.0 * h);
@@ -107,7 +113,10 @@ impl MoleculeCanvas {
     /// `[-by, by]` bottom→top, so the row axis is flipped relative to screen rows.
     ///
     /// `camera` and `molecule` must match what the last render drew so the
-    /// projection lines up with the pixels on screen.
+    /// projection lines up with the pixels on screen. A camera that has been
+    /// panned with [`Camera::translate`](crate::camera::Camera::translate)
+    /// keeps the hit-test aligned with the molecule on screen, since the
+    /// projection includes the offset.
     ///
     /// # Example
     ///
@@ -157,16 +166,7 @@ impl MoleculeCanvas {
         position: impl Into<Position>,
     ) -> Option<AtomIndex> {
         let position = position.into();
-        if !self.inner.contains(position) {
-            return None;
-        }
-        let (col, row) = (position.x, position.y);
-
-        // Cell -> canvas-data coords, sampling the cell's center; y is flipped.
-        let fx = (f64::from(col - self.inner.x) + 0.5) / f64::from(self.inner.width);
-        let fy = (f64::from(row - self.inner.y) + 0.5) / f64::from(self.inner.height);
-        let px = -self.bx + fx * 2.0 * self.bx;
-        let py = self.by - fy * 2.0 * self.by;
+        let (px, py) = self.cell_to_data(position)?;
 
         molecule
             .atoms()
@@ -182,6 +182,77 @@ impl MoleculeCanvas {
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| AtomIndex::new(i))
+    }
+
+    /// Convert a terminal cell to canvas data coordinates — the same space
+    /// [`Camera::project_point`](crate::camera::Camera::project_point) and
+    /// [`pick_atom`](Self::pick_atom) use — sampling the cell's center, or
+    /// `None` if the cell is outside the canvas area.
+    ///
+    /// Data x runs left→right over `[-bx, bx]` and data y runs bottom→top over
+    /// `[-by, by]`, so the row axis is flipped relative to screen rows.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ratatui::layout::Rect;
+    /// use tui_molviz::MoleculeCanvas;
+    ///
+    /// let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), 1.0, 1.0);
+    /// let (x, y) = canvas.cell_to_data((10, 5)).unwrap();
+    /// // The center cell of a 20x10 canvas samples half a cell off the exact
+    /// // origin (no cell is centered on it): half a cell is 0.025 of the
+    /// // width and 0.05 of the height.
+    /// assert!((x - 0.05 * 1.15).abs() < 1e-9);
+    /// assert!((y + 0.10 * 1.15).abs() < 1e-9);
+    /// assert_eq!(canvas.cell_to_data((20, 0)), None);
+    /// ```
+    #[must_use]
+    pub fn cell_to_data(&self, position: impl Into<Position>) -> Option<(f64, f64)> {
+        let position = position.into();
+        if !self.inner.contains(position) {
+            return None;
+        }
+        let fx = (f64::from(position.x - self.inner.x) + 0.5) / f64::from(self.inner.width.max(1));
+        let fy = (f64::from(position.y - self.inner.y) + 0.5) / f64::from(self.inner.height.max(1));
+        Some((-self.bx + fx * 2.0 * self.bx, self.by - fy * 2.0 * self.by))
+    }
+
+    /// Convert a terminal-cell delta into
+    /// [`Camera::translate`](crate::camera::Camera::translate) units (Å in the
+    /// screen plane), for panning. This is how a mouse-drag delta in cells
+    /// becomes a camera pan: translate by this on each move event.
+    ///
+    /// `drow` follows terminal rows (down positive); the returned `dy` follows
+    /// data coordinates (up positive), so a drag down the screen yields a
+    /// negative `dy`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ratatui::layout::Rect;
+    /// use tui_molviz::{MoleculeCanvas, camera::Camera};
+    ///
+    /// let canvas = MoleculeCanvas::new(Rect::new(0, 0, 20, 10), 1.0, 1.0);
+    /// // Two cells right, one cell down.
+    /// let (dx, dy) = canvas.cell_delta_to_world(2, 1);
+    /// assert!((dx - 2.0 * 2.0 * 1.15 / 20.0).abs() < 1e-9);
+    /// assert!((dy + 1.0 * 2.0 * 1.15 / 10.0).abs() < 1e-9);
+    ///
+    /// let mut camera = Camera::new(0.0, 0.0, 1.0);
+    /// camera.translate(dx, dy);
+    /// assert_eq!(camera.offset(), (dx, dy));
+    /// ```
+    #[must_use]
+    pub fn cell_delta_to_world(&self, dcol: i32, drow: i32) -> (f64, f64) {
+        let (w, h) = (
+            f64::from(self.inner.width.max(1)),
+            f64::from(self.inner.height.max(1)),
+        );
+        (
+            f64::from(dcol) * 2.0 * self.bx / w,
+            -f64::from(drow) * 2.0 * self.by / h,
+        )
     }
 }
 
@@ -214,7 +285,7 @@ pub struct MoleculeVisualizer<'a> {
     show_molecule_legend: bool,
     /// Whether to show bonds between atoms. Default is `true`
     show_bonds: bool,
-    /// The camera used to display the molecule. Used to control rotation and zooming
+    /// The camera used to display the molecule. Used to control rotation, zooming, and panning
     camera: Camera,
     /// Atom index to draw a highlight marker on, if any. Out-of-range indices
     /// are ignored at render time. Default is `None`.
@@ -1005,6 +1076,54 @@ mod tests {
 
         // A click outside the canvas rect is rejected outright.
         assert_eq!(canvas.pick_atom(camera, &molecule, (99, 99)), None);
+    }
+
+    #[test]
+    fn cell_to_data_maps_cells_to_the_canvas_bounds() {
+        let canvas = MoleculeCanvas::new(Rect::new(2, 3, 20, 10), 1.0, 1.0);
+        let by = MoleculeCanvas::EDGE_PADDING;
+        let bx = by; // 20x10 packs 2 dots/cell across and 4 down, a square grid
+
+        // The top-left cell's center samples near (-bx, by); the bottom-right
+        // cell's near (bx, -by).
+        let (x, y) = canvas.cell_to_data((2, 3)).unwrap();
+        assert!((x + bx - 0.5 * 2.0 * bx / 20.0).abs() < 1e-9);
+        assert!((y - by + 0.5 * 2.0 * by / 10.0).abs() < 1e-9);
+        let (x, y) = canvas.cell_to_data((21, 12)).unwrap();
+        assert!((x - bx + 0.5 * 2.0 * bx / 20.0).abs() < 1e-9);
+        assert!((y + by - 0.5 * 2.0 * by / 10.0).abs() < 1e-9);
+
+        // Cells outside the canvas area are rejected.
+        assert_eq!(canvas.cell_to_data((1, 3)), None);
+        assert_eq!(canvas.cell_to_data((22, 3)), None);
+    }
+
+    #[test]
+    fn panning_moves_the_atom_by_the_same_cells() {
+        // The user-facing round trip: a click hit-tests, a drag converts cell
+        // deltas to world units, and the next click lands where the molecule
+        // moved to.
+        let molecule: Molecule = vec![atom(0.0, 0.0, 0.0)].into_iter().collect();
+        let camera = Camera::new(0.0, 0.0, 1.0);
+        // Odd dimensions so cell (10, 5) is exactly centered on the origin.
+        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 21, 11), molecule.radius(), 1.0);
+
+        let (cx, cy) = (10, 5);
+        assert_eq!(
+            canvas.pick_atom(camera, &molecule, (cx, cy)),
+            Some(AtomIndex::new(0))
+        );
+
+        // Drag 2 cells right, 1 cell down.
+        let mut panned = camera;
+        let (dx, dy) = canvas.cell_delta_to_world(2, 1);
+        panned.translate(dx, dy);
+
+        assert_eq!(
+            canvas.pick_atom(panned, &molecule, (cx + 2, cy + 1)),
+            Some(AtomIndex::new(0))
+        );
+        assert_eq!(canvas.pick_atom(panned, &molecule, (cx, cy)), None);
     }
 
     #[test]
