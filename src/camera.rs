@@ -1,4 +1,4 @@
-use std::f64::consts::{PI, TAU};
+use crate::geometry::wrap_angle;
 
 /// View orientation (radians), zoom factor, and screen offset.
 ///
@@ -201,13 +201,10 @@ impl Camera {
     }
 }
 
-/// Fold an angle into `[-PI, PI)`.
-fn wrap_angle(angle: f64) -> f64 {
-    (angle + PI).rem_euclid(TAU) - PI
-}
-
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::{PI, TAU};
+
     use super::*;
 
     const ZOOM: f64 = 1.0;

@@ -4,6 +4,9 @@ use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
 
+use crate::geometry;
+use crate::measurement::MeasurementError;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Atom {
     element: Element,
@@ -310,10 +313,7 @@ impl Molecule {
         for i in 0..atoms.len() {
             for j in (i + 1)..atoms.len() {
                 let (a, b) = (&atoms[i], &atoms[j]);
-                let d = ((a.position()[0] - b.position()[0]).powi(2)
-                    + (a.position()[1] - b.position()[1]).powi(2)
-                    + (a.position()[2] - b.position()[2]).powi(2))
-                .sqrt();
+                let d = geometry::distance(a.position(), b.position());
                 if let Some(order) =
                     Self::perceived_order(a.covalent_radius() + b.covalent_radius(), d)
                 {
@@ -370,12 +370,7 @@ impl Molecule {
     fn bounding_radius(atoms: &[Atom]) -> f64 {
         atoms
             .iter()
-            .map(|a| {
-                (a.position()[0] * a.position()[0]
-                    + a.position()[1] * a.position()[1]
-                    + a.position()[2] * a.position()[2])
-                    .sqrt()
-            })
+            .map(|a| geometry::norm(a.position()))
             .fold(0.0_f64, f64::max)
             .max(1.0)
     }
@@ -461,6 +456,150 @@ impl Molecule {
     #[must_use]
     pub fn radius(&self) -> f64 {
         self.radius
+    }
+
+    /// The atom at `index`, or `None` if the index is outside the atom list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// assert_eq!(water.get(AtomIndex::new(0)).map(Atom::element), Some(Element::O));
+    /// assert_eq!(water.get(AtomIndex::new(9)), None);
+    /// ```
+    #[must_use]
+    pub fn get(&self, index: AtomIndex) -> Option<&Atom> {
+        self.atoms.get(index.get())
+    }
+
+    /// The distance between two atoms, in Ångström.
+    ///
+    /// The atoms are recentered on their centroid at construction, but distance
+    /// is translation-invariant, so this is the distance in the coordinates that
+    /// were handed in.
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if either index is outside the atom
+    /// list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let carbonyl = Molecule::from_atoms([
+    ///     Atom::new(Element::C, [0.00, 0.0, 0.0]),
+    ///     Atom::new(Element::O, [1.21, 0.0, 0.0]),
+    /// ]);
+    ///
+    /// let d = carbonyl.distance(AtomIndex::new(0), AtomIndex::new(1))?;
+    /// assert!((d - 1.21).abs() < 1e-12);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn distance(&self, a: AtomIndex, b: AtomIndex) -> Result<f64, MeasurementError> {
+        Ok(geometry::distance(self.position(a)?, self.position(b)?))
+    }
+
+    /// The angle at `vertex` between the arms reaching `a` and `c`, in radians
+    /// over `[0, PI]`. Convert with [`f64::to_degrees`].
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
+    /// list, and [`MeasurementError::Degenerate`] if an atom sits on the vertex,
+    /// leaving an arm with no direction. Collinear atoms are not degenerate —
+    /// they measure `PI`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// // The oxygen is the vertex, so it goes in the middle.
+    /// let hoh = water.angle(AtomIndex::new(1), AtomIndex::new(0), AtomIndex::new(2))?;
+    /// assert!((hoh.to_degrees() - 104.5).abs() < 0.1);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn angle(
+        &self,
+        a: AtomIndex,
+        vertex: AtomIndex,
+        c: AtomIndex,
+    ) -> Result<f64, MeasurementError> {
+        geometry::angle(self.position(a)?, self.position(vertex)?, self.position(c)?)
+            .ok_or(MeasurementError::Degenerate)
+    }
+
+    /// The signed dihedral of `a`-`b`-`c`-`d` about the `b`–`c` axis, in radians
+    /// over `(-PI, PI]`, following the IUPAC sign convention.
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
+    /// list, and [`MeasurementError::Degenerate`] if the axis is degenerate or a
+    /// terminal atom lies on it, leaving no plane to measure the torsion
+    /// between.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// // A right-angled torsion: the two end atoms sit in perpendicular planes.
+    /// let mol = Molecule::from_atoms([
+    ///     Atom::new(Element::C, [0.0, 1.0, 0.0]),
+    ///     Atom::new(Element::C, [0.0, 0.0, 0.0]),
+    ///     Atom::new(Element::C, [1.5, 0.0, 0.0]),
+    ///     Atom::new(Element::C, [1.5, 0.0, 1.0]),
+    /// ]);
+    ///
+    /// let torsion = mol.dihedral(
+    ///     AtomIndex::new(0), AtomIndex::new(1), AtomIndex::new(2), AtomIndex::new(3),
+    /// )?;
+    /// assert!((torsion.to_degrees() - 90.0).abs() < 1e-9);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn dihedral(
+        &self,
+        a: AtomIndex,
+        b: AtomIndex,
+        c: AtomIndex,
+        d: AtomIndex,
+    ) -> Result<f64, MeasurementError> {
+        geometry::dihedral(
+            self.position(a)?,
+            self.position(b)?,
+            self.position(c)?,
+            self.position(d)?,
+        )
+        .ok_or(MeasurementError::Degenerate)
+    }
+
+    fn position(&self, index: AtomIndex) -> Result<[f64; 3], MeasurementError> {
+        self.get(index)
+            .map(Atom::position)
+            .ok_or(MeasurementError::AtomOutOfRange {
+                index,
+                atom_count: self.atoms.len(),
+            })
     }
 
     /// Returns an iterator over the molecule's atoms.

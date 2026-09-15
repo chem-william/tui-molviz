@@ -17,7 +17,7 @@ use ratatui::{
 };
 use tui_molviz::camera::Camera;
 use tui_molviz::molecule::{Atom, Molecule};
-use tui_molviz::{AtomIndex, Element, MoleculeVisualizer, MoleculeVisualizerState};
+use tui_molviz::{Element, Measurement, MoleculeVisualizer, MoleculeVisualizerState, Selection};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -32,8 +32,8 @@ struct App {
     auto_spin: bool,
     last_tick: Instant,
     should_quit: bool,
-    /// Atom the user last clicked, highlighted in the view.
-    selected: Option<AtomIndex>,
+    /// Atoms the user has clicked, highlighted in the view and measured.
+    selection: Selection,
     /// Canvas mapping from the last render, used to hit-test mouse clicks.
     viz_state: MoleculeVisualizerState,
     /// The cell a left-button press started on, while the button is down.
@@ -50,6 +50,9 @@ impl App {
     const DRAG_THRESHOLD: u32 = 2;
     /// Cells the camera pans per shift+arrow keypress.
     const PAN_STEP_CELLS: i32 = 2;
+    /// Four atoms is a dihedral, the largest quantity there is to measure, so
+    /// the selection stops there rather than growing without purpose.
+    const MAX_SELECTED_ATOMS: usize = 4;
 
     fn new() -> Self {
         Self {
@@ -58,7 +61,7 @@ impl App {
             auto_spin: true,
             last_tick: Instant::now(),
             should_quit: false,
-            selected: None,
+            selection: Selection::with_limit(Self::MAX_SELECTED_ATOMS),
             viz_state: MoleculeVisualizerState::default(),
             press_start: None,
             last_mouse: None,
@@ -90,7 +93,7 @@ impl App {
 
         let visualizer = MoleculeVisualizer::new(&self.molecule)
             .camera(self.camera)
-            .highlight(self.selected)
+            .highlight(&self.selection)
             .block(Block::bordered().title("tui-molviz showcase"))
             .style(Style::default().bg(Color::Black));
 
@@ -99,13 +102,7 @@ impl App {
         frame.render_stateful_widget(&visualizer, molecule_area, &mut self.viz_state);
 
         let spin = if self.auto_spin { "on" } else { "off" };
-        let selected = match self.selected {
-            Some(i) => {
-                let atom = &self.molecule.atoms()[i.get()];
-                format!("{} (#{i})", atom.element().symbol())
-            }
-            None => "none".to_string(),
-        };
+        let selected = self.selection_label();
         let (tx, ty) = self.camera.offset();
         let offset = if (tx, ty) == (0.0, 0.0) {
             "center".to_string()
@@ -116,7 +113,9 @@ impl App {
             Line::from(
                 "arrows rotate   + zoom in   - zoom out   drag pan   shift+arrows pan",
             ),
-            Line::from("c center   r reset   space spin   click select   q quit"),
+            Line::from(
+                "c center   r reset   space spin   click 2-4 atoms to measure   backspace clear   q quit",
+            ),
             Line::from(format!(
                 "yaw {:+.2}   pitch {:+.2}   zoom {:.2}   offset {offset}   spin {spin}   selected {selected}",
                 self.camera.yaw(), self.camera.pitch(), self.camera.zoom()
@@ -175,6 +174,7 @@ impl App {
             KeyCode::Char('c') => self.camera.recenter(),
             KeyCode::Char('r') => self.camera.reset(),
             KeyCode::Char(' ') => self.auto_spin = !self.auto_spin,
+            KeyCode::Backspace | KeyCode::Delete => self.selection.clear(),
             _ => {}
         }
     }
@@ -239,10 +239,41 @@ impl App {
     /// selection. `pick_atom` only needs the raw column/row and the same camera
     /// the last frame was drawn with, so the widget stays event-source agnostic.
     fn handle_click(&mut self, col: u16, row: u16) {
-        if let Some(canvas) = self.viz_state.canvas() {
-            let hit = canvas.pick_atom(self.camera, &self.molecule, (col, row));
+        let Some(canvas) = self.viz_state.canvas() else {
+            return;
+        };
+        match canvas.pick_atom(self.camera, &self.molecule, (col, row)) {
+            // Clicking an atom picks it up, or puts it back down if it was
+            // already selected. Once four are picked, further atoms are ignored
+            // until one is released.
+            Some(hit) => {
+                self.selection.toggle(hit);
+            }
             // A click on empty space clears the selection.
-            self.selected = hit;
+            None => self.selection.clear(),
+        }
+    }
+
+    /// What the selection reads as in the status line: the measured quantity
+    /// once two to four atoms are picked, otherwise just what is selected.
+    ///
+    /// This is the same call the widget makes to label the canvas, so the two
+    /// always agree.
+    fn selection_label(&self) -> String {
+        match Measurement::of(&self.molecule, &self.selection) {
+            Ok(Some(measured)) => measured.to_string(),
+            // Only reachable for atoms too nearly collinear to define a torsion.
+            Err(_) => "undefined".to_string(),
+            Ok(None) if self.selection.is_empty() => "none".to_string(),
+            Ok(None) => self
+                .selection
+                .iter()
+                .map(|i| match self.molecule.get(i) {
+                    Some(atom) => format!("{}{i}", atom.element().symbol()),
+                    None => format!("?{i}"),
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
         }
     }
 }

@@ -50,6 +50,29 @@ Bonds are perceived from interatomic distances and drawn by their order - single
 
 The camera can be rotated (`Camera::rotate`), zoomed (`Camera::zoom_by`), and panned (`Camera::translate`). Hit-test terminal cells back to atoms with `MoleculeCanvas::pick_atom` for selection.
 
+Collect picked atoms into a `Selection` and hand it to `MoleculeVisualizer::highlight` to ring them. Two, three, or four selected atoms also measure a distance, an angle, or a dihedral: `Measurement::of` returns the value ready to print in your own status line, and the widget labels it on the canvas. `Molecule::distance`, `Molecule::angle`, and `Molecule::dihedral` compute the same quantities directly.
+
+```rust
+use tui_molviz::{AtomIndex, Measurement, Selection};
+# use tui_molviz::molecule::{Atom, Molecule};
+# use tui_molviz::Element;
+# let water = Molecule::from_atoms([
+#     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+#     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+#     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+# ]);
+
+let mut selection = Selection::with_limit(4);
+for atom in [1, 0, 2] {
+    selection.toggle(AtomIndex::new(atom));
+}
+
+// The oxygen is in the middle, so it is the vertex of the angle.
+let measured = Measurement::of(&water, &selection)?.expect("three atoms measure an angle");
+assert_eq!(measured.to_string(), "H1–O0–H2  104.5°");
+# Ok::<(), tui_molviz::MeasurementError>(())
+```
+
 For a larger interactive example with rotation, zoom, and panning:
 
 ```sh

@@ -41,12 +41,17 @@
 //! * `examples/showcase.rs` is a more complex example that showcases zoom, rotation, panning, and selection of atoms
 
 pub mod camera;
+mod geometry;
+pub mod measurement;
 pub mod molecule;
+mod overlay;
+pub mod selection;
 use std::collections::HashSet;
 
 use crate::camera::Camera;
 use crate::molecule::{BondOrder, Molecule};
 
+pub use measurement::{Measurement, MeasurementError};
 pub use mendeleev::Color as CpkColor;
 pub use mendeleev::Element;
 pub use molecule::AtomIndex;
@@ -60,6 +65,7 @@ use ratatui::{
         canvas::{Canvas, Line as CanvasLine, Points},
     },
 };
+pub use selection::Selection;
 
 /// The braille canvas a molecule is drawn on.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -107,6 +113,16 @@ impl MoleculeCanvas {
         Self { inner, bx, by, dpu }
     }
 
+    /// One braille dot, in canvas-data units.
+    pub(crate) fn dot(&self) -> f64 {
+        1.0 / self.dpu
+    }
+
+    /// The canvas half-extents, in canvas-data units.
+    pub(crate) fn half_bounds(&self) -> (f64, f64) {
+        (self.bx, self.by)
+    }
+
     /// Drawn radius of an atom, in braille dots.
     #[allow(clippy::manual_clamp)]
     fn atom_radius_dots(&self, cov: f64) -> f64 {
@@ -136,7 +152,7 @@ impl MoleculeCanvas {
     /// use ratatui::{buffer::Buffer, layout::Rect, widgets::StatefulWidget};
     /// use tui_molviz::camera::Camera;
     /// use tui_molviz::molecule::{Atom, Molecule, AtomIndex};
-    /// use tui_molviz::{Element, MoleculeVisualizer, MoleculeVisualizerState};
+    /// use tui_molviz::{Element, Measurement, MoleculeVisualizer, MoleculeVisualizerState, Selection};
     ///
     /// let molecule = Molecule::from_atoms([
     ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
@@ -160,11 +176,22 @@ impl MoleculeCanvas {
     /// let (col, row) = (13u16, 6u16);
     ///
     /// // Hit-test with the same camera and molecule the frame was drawn with.
-    /// let selected = state.canvas().unwrap().pick_atom(camera, &molecule, (col, row));
-    /// assert_eq!(selected, Some(AtomIndex::new(0)), "the click landed on the oxygen");
+    /// let hit = state.canvas().unwrap().pick_atom(camera, &molecule, (col, row));
+    /// assert_eq!(hit, Some(AtomIndex::new(0)), "the click landed on the oxygen");
     ///
-    /// // Feed the index into `.highlight` for the next frame.
-    /// let _next = MoleculeVisualizer::new(&molecule).camera(camera).highlight(selected);
+    /// // Collect hits into a `Selection` to build up a measurement, then feed
+    /// // it to `.highlight` for the next frame.
+    /// let mut selection = Selection::with_limit(4);
+    /// if let Some(hit) = hit {
+    ///     selection.toggle(hit);
+    /// }
+    /// selection.toggle(AtomIndex::new(1));
+    ///
+    /// let measured = Measurement::of(&molecule, &selection)?.expect("two atoms");
+    /// assert_eq!(measured.to_string(), "O0–H1  0.957 Å");
+    ///
+    /// let _next = MoleculeVisualizer::new(&molecule).camera(camera).highlight(&selection);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
     /// ```
     #[must_use]
     pub fn pick_atom(
@@ -295,9 +322,12 @@ pub struct MoleculeVisualizer<'a> {
     show_bonds: bool,
     /// The camera used to display the molecule. Used to control rotation, zooming, and panning
     camera: Camera,
-    /// Atom index to draw a highlight marker on, if any. Out-of-range indices
-    /// are ignored at render time. Default is `None`.
-    highlight: Option<AtomIndex>,
+    /// Atoms to draw highlight markers on, in the order they were selected.
+    /// Out-of-range indices are ignored at render time. Default is empty.
+    highlight: Vec<AtomIndex>,
+    /// Whether to draw the measurement overlay for 2, 3, or 4 highlighted
+    /// atoms. Default is `true`.
+    show_measurement: bool,
     /// Style of the highlight marker (its `fg` color is used). `None` disables
     /// the highlight even when [`highlight`](Self::highlight) is set.
     highlight_style: Option<Style>,
@@ -330,7 +360,8 @@ impl<'a> MoleculeVisualizer<'a> {
             show_molecule_legend: true,
             show_bonds: true,
             camera: Camera::default(),
-            highlight: None,
+            highlight: Vec::new(),
+            show_measurement: true,
             highlight_style: Some(Style::default().fg(Self::DEFAULT_HIGHLIGHT_COLOR)),
         }
     }
@@ -385,15 +416,61 @@ impl<'a> MoleculeVisualizer<'a> {
         self
     }
 
-    /// Highlights the atom at the given [`AtomIndex`] by drawing a marker ring
-    /// around it, or clears the highlight with `None`. The index is typically
-    /// one returned by [`MoleculeCanvas::pick_atom`]; out-of-range indices are
-    /// ignored at render time.
+    /// Highlights each of `atoms` by drawing a marker ring around it, replacing
+    /// any previous highlight. Pass `[]` to clear it.
+    ///
+    /// The indices are typically ones returned by
+    /// [`MoleculeCanvas::pick_atom`], collected into a [`Selection`]. Indices
+    /// that name no atom of the molecule are ignored at render time, and repeats
+    /// collapse onto their first occurrence.
+    ///
+    /// Order matters: with [`show_measurement`](Self::show_measurement) on, two
+    /// atoms are labelled with their distance, three with the angle at the
+    /// *middle* one, and four with the dihedral about the middle pair.
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, Molecule};
+    /// use tui_molviz::{AtomIndex, Element, MoleculeVisualizer, Selection};
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// // A selection, a bare array, and a single optional index all work.
+    /// let selection: Selection = [AtomIndex::new(1), AtomIndex::new(0)].into_iter().collect();
+    /// let _ = MoleculeVisualizer::new(&water).highlight(&selection);
+    /// let _ = MoleculeVisualizer::new(&water).highlight([AtomIndex::new(0)]);
+    /// let _ = MoleculeVisualizer::new(&water).highlight(Some(AtomIndex::new(0)));
+    /// let _ = MoleculeVisualizer::new(&water).highlight([]); // cleared
+    /// ```
     ///
     /// This is a fluent setter method which must be chained or used as it consumes self
     #[must_use = "method moves the value of self and returns the modified value"]
-    pub const fn highlight(mut self, highlight: Option<AtomIndex>) -> Self {
-        self.highlight = highlight;
+    pub fn highlight(mut self, atoms: impl IntoIterator<Item = AtomIndex>) -> Self {
+        self.highlight = atoms.into_iter().collect();
+        self
+    }
+
+    /// Sets whether to annotate the highlighted atoms with the quantity they
+    /// measure — a distance for two, an angle for three, a dihedral for four —
+    /// drawing dashed connectors and printing the value on the canvas. Default
+    /// is `true`; it draws nothing until at least two atoms are highlighted.
+    ///
+    /// The connectors and the arc are drawn in the projection, so they meet the
+    /// atoms on screen, but the printed number is measured in the molecule's
+    /// true 3-D coordinates. Rotating the camera therefore opens and closes the
+    /// arc while the number holds still: it marks *which* angle is meant rather
+    /// than redrawing its value.
+    ///
+    /// The value is the one [`Measurement::of`] returns for the same atoms, so a
+    /// status line built from that agrees with the canvas.
+    ///
+    /// This is a fluent setter method which must be chained or used as it consumes self
+    #[must_use = "method moves the value of self and returns the modified value"]
+    pub const fn show_measurement(mut self, show_measurement: bool) -> Self {
+        self.show_measurement = show_measurement;
         self
     }
 
@@ -477,32 +554,99 @@ impl MoleculeVisualizer<'_> {
     /// Number of points sampled around the highlight ring.
     const HIGHLIGHT_RING_STEPS: u32 = 48;
 
-    /// The marker ring for the highlighted atom, if one is set, its style has a
-    /// marker color, and the index is in range. Returns the ring's braille points
-    /// (in canvas-data coords) and color, for drawing on top of the molecule.
-    fn highlight_ring(
+    /// The color the highlight markers are drawn in, or `None` when the style
+    /// suppresses them entirely.
+    fn marker_color(&self) -> Option<ratatui::style::Color> {
+        Some(
+            self.highlight_style?
+                .fg
+                .unwrap_or(Self::DEFAULT_HIGHLIGHT_COLOR),
+        )
+    }
+
+    /// The highlighted atoms that actually exist, in highlight order, with
+    /// repeats collapsed onto their first occurrence.
+    ///
+    /// The order is contractual — the middle of three is the angle's vertex, the
+    /// middle two of four the dihedral's axis — so this deduplicates without
+    /// reordering, which a set would not.
+    fn highlighted_indices(&self) -> Vec<AtomIndex> {
+        let mut selected = Vec::with_capacity(self.highlight.len());
+        for &index in &self.highlight {
+            if self.molecule.get(index).is_some() && !selected.contains(&index) {
+                selected.push(index);
+            }
+        }
+        selected
+    }
+
+    /// The radius of the highlight ring around atom `i`, in braille dots: the
+    /// drawn disk plus the gap that keeps the ring off it. The measurement
+    /// overlay starts its clearance here, so both read it from one place.
+    fn ring_radius_dots(&self, canvas: &MoleculeCanvas, i: AtomIndex) -> f64 {
+        canvas.atom_radius_dots(self.molecule.atoms()[i.get()].covalent_radius())
+            + Self::HIGHLIGHT_RING_GAP_DOTS
+    }
+
+    /// The marker rings for `selected`, in canvas-data coords, flattened into
+    /// one point list: they share a color, so a single draw keeps the terminal's
+    /// color escapes down.
+    fn highlight_rings(
         &self,
+        selected: &[AtomIndex],
         proj: &[(f64, f64, f64)],
         canvas: &MoleculeCanvas,
-    ) -> Option<(Vec<(f64, f64)>, ratatui::style::Color)> {
-        let i = self.highlight.filter(|&i| i.get() < proj.len())?.get();
-        let color = self
-            .highlight_style?
-            .fg
-            .unwrap_or(Self::DEFAULT_HIGHLIGHT_COLOR);
-
-        let dot = 1.0 / canvas.dpu; // one braille dot, in world units
-        let r_dots = canvas.atom_radius_dots(self.molecule.atoms()[i].covalent_radius());
-        let r_ring = (r_dots + Self::HIGHLIGHT_RING_GAP_DOTS) * dot;
-        let pts = (0..Self::HIGHLIGHT_RING_STEPS)
-            .map(|k| {
-                let theta =
-                    std::f64::consts::TAU * f64::from(k) / f64::from(Self::HIGHLIGHT_RING_STEPS);
+    ) -> Vec<(f64, f64)> {
+        let dot = canvas.dot(); // one braille dot, in world units
+        let steps = Self::HIGHLIGHT_RING_STEPS;
+        let mut pts = Vec::with_capacity(selected.len() * steps as usize);
+        for &i in selected {
+            let r_ring = self.ring_radius_dots(canvas, i) * dot;
+            let (px, py, _) = proj[i.get()];
+            pts.extend((0..steps).map(|k| {
+                let theta = std::f64::consts::TAU * f64::from(k) / f64::from(steps);
                 let (s, c) = theta.sin_cos();
-                (proj[i].0 + r_ring * c, proj[i].1 + r_ring * s)
+                (px + r_ring * c, py + r_ring * s)
+            }));
+        }
+        pts
+    }
+
+    /// The measurement annotation for `selected` — dashed connectors, an arc for
+    /// an angle, and the value as a label — or `None` when the overlay is off,
+    /// the selection is not two to four atoms, or the quantity is undefined.
+    fn measurement_overlay(
+        &self,
+        selected: &[AtomIndex],
+        proj: &[(f64, f64, f64)],
+        canvas: &MoleculeCanvas,
+        color: ratatui::style::Color,
+    ) -> Option<overlay::Overlay> {
+        if !self.show_measurement {
+            return None;
+        }
+
+        // The same call a consumer makes for their own status line, so the
+        // canvas label and the status line cannot disagree.
+        let value = Measurement::of(self.molecule, selected).ok().flatten()?;
+
+        let dot = canvas.dot();
+        let (bx, by) = canvas.half_bounds();
+        let anchors: Vec<overlay::Anchor> = selected
+            .iter()
+            .map(|&i| {
+                // Keep clear of the drawn disk, the ring around it, and a gap.
+                let clearance = self.ring_radius_dots(canvas, i) + overlay::RING_CLEARANCE_DOTS;
+                let (x, y, _) = proj[i.get()];
+                overlay::Anchor {
+                    x,
+                    y,
+                    clearance: clearance * dot,
+                }
             })
             .collect();
-        Some((pts, color))
+
+        overlay::measurement(overlay::Metrics { dot, bx, by }, &anchors, &value, color)
     }
 
     /// A color key for the elements actually in the molecule (each element's
@@ -575,7 +719,7 @@ impl MoleculeVisualizer<'_> {
         }
 
         // One braille dot, in world units.
-        let dot = 1.0 / canvas.dpu;
+        let dot = canvas.dot();
         let mut lines = Vec::with_capacity(self.molecule.bonds().len() * 3);
         for &bond in self.molecule.bonds() {
             let (s, e) = (bond.start().get(), bond.end().get());
@@ -666,7 +810,7 @@ impl MoleculeVisualizer<'_> {
             .fold(f64::NEG_INFINITY, f64::max);
 
         // One braille dot, in world units.
-        let dot = 1.0 / canvas.dpu;
+        let dot = canvas.dot();
 
         // Bond lines are drawn before the atoms, so the atom disks still
         // occlude the bond ends.
@@ -700,8 +844,16 @@ impl MoleculeVisualizer<'_> {
                 }
             }
         }
-        // Drawn last, on top of the atom it marks, so the selection stays visible.
-        let highlight_ring = self.highlight_ring(&proj, &canvas);
+        // Drawn last, on top of the atoms they mark, so the selection stays
+        // visible. An empty ring list stays `None` so that an unhighlighted
+        // render issues no extra draw call at all.
+        let selected = self.highlighted_indices();
+        let marker_color = self.marker_color();
+        let highlight_rings = marker_color
+            .map(|color| (self.highlight_rings(&selected, &proj, &canvas), color))
+            .filter(|(pts, _)| !pts.is_empty());
+        let measurement =
+            marker_color.and_then(|c| self.measurement_overlay(&selected, &proj, &canvas, c));
 
         let drawing_canvas = Canvas::default()
             .background_color(self.style.bg.unwrap_or(ratatui::style::Color::Reset))
@@ -719,11 +871,24 @@ impl MoleculeVisualizer<'_> {
                     });
                 }
 
-                if let Some((pts, color)) = &highlight_ring {
+                if let Some((pts, color)) = &highlight_rings {
                     ctx.draw(&Points {
                         coords: pts,
                         color: *color,
                     });
+                }
+
+                if let Some(measurement) = &measurement {
+                    if !measurement.points.is_empty() {
+                        ctx.draw(&Points {
+                            coords: &measurement.points,
+                            color: measurement.color,
+                        });
+                    }
+                    // The paint closure is `Fn`, not `FnOnce`, so the label is
+                    // cloned rather than moved out.
+                    let (x, y, line) = &measurement.label;
+                    ctx.print(*x, *y, line.clone());
                 }
             });
 
@@ -1364,5 +1529,332 @@ mod tests {
                 bond.end()
             );
         }
+    }
+
+    /// The whole buffer as one string, for asserting on label *text* rather
+    /// than on braille art, which any dot-level change would shift.
+    fn buffer_text(buffer: &Buffer) -> String {
+        buffer_lines(buffer).join("\n")
+    }
+
+    /// Every braille cell's position and glyph. Comparing these between two
+    /// renders isolates "did a dot move" from "did a label appear".
+    fn braille_cells(buffer: &Buffer) -> Vec<(u16, u16, String)> {
+        let area = *buffer.area();
+        (0..area.height)
+            .flat_map(|y| (0..area.width).map(move |x| (x, y)))
+            .filter_map(|(x, y)| {
+                let symbol = buffer[(area.x + x, area.y + y)].symbol();
+                let braille = symbol
+                    .chars()
+                    .next()
+                    .and_then(|c| u32::from(c).checked_sub(BRAILLE_BASE))
+                    .is_some_and(|pattern| pattern < 0x100);
+                braille.then(|| (x, y, symbol.to_string()))
+            })
+            .collect()
+    }
+
+    /// A canvas with room for a measurement label beside the molecule.
+    fn wide() -> Rect {
+        Rect::new(0, 0, 44, 14)
+    }
+
+    /// A camera looking straight down the world z axis, so the projection is
+    /// the x-y plane and test coordinates land where they read.
+    fn head_on() -> Camera {
+        Camera::new(0.0, 0.0, 1.0)
+    }
+
+    fn highlighted_with(
+        mol: &Molecule,
+        atoms: impl IntoIterator<Item = usize>,
+        measure: bool,
+    ) -> Buffer {
+        render_to_buffer_at(
+            &MoleculeVisualizer::new(mol)
+                .camera(head_on())
+                .highlight(atoms.into_iter().map(AtomIndex::new))
+                .show_measurement(measure),
+            wide(),
+        )
+    }
+
+    fn highlighted(mol: &Molecule, atoms: impl IntoIterator<Item = usize>) -> Buffer {
+        highlighted_with(mol, atoms, true)
+    }
+
+    /// The label may *cover* braille cells — `Context::print` writes whole cells
+    /// over every layer — so the check is that the overlay lights no cell that
+    /// was not already lit, which a stray corner dot would.
+    fn assert_lights_no_new_cell(before: &Buffer, after: &Buffer, what: &str) {
+        let already_lit: Vec<(u16, u16)> = braille_cells(before)
+            .into_iter()
+            .map(|(x, y, _)| (x, y))
+            .collect();
+        for (x, y, glyph) in braille_cells(after) {
+            assert!(
+                already_lit.contains(&(x, y)),
+                "{what} lit a new braille cell {glyph:?} at ({x}, {y})"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_highlight_takes_no_overlay_code_path() {
+        // Every literal-art snapshot in this module renders without a
+        // highlight. This pins the reason they are allowed to stay literal:
+        // with nothing highlighted, the ring and overlay code must not reach
+        // the canvas at all.
+        let mol = create_molecule();
+        let plain = render_to_buffer(&MoleculeVisualizer::new(&mol));
+        let measured = render_to_buffer(&MoleculeVisualizer::new(&mol).show_measurement(true));
+        let unmeasured = render_to_buffer(&MoleculeVisualizer::new(&mol).show_measurement(false));
+
+        assert_eq!(plain, measured);
+        assert_eq!(plain, unmeasured);
+        assert_eq!(buffer_lines(&plain), diamond_expected());
+    }
+
+    #[test]
+    fn highlight_draws_a_ring_on_every_selected_atom() {
+        let mol = create_molecule();
+        let rings = |atoms: &[usize]| {
+            painted_cells(&render_to_buffer(
+                &MoleculeVisualizer::new(&mol)
+                    .show_bonds(false)
+                    .show_measurement(false)
+                    .highlight(atoms.iter().copied().map(AtomIndex::new)),
+            ))
+        };
+
+        assert!(rings(&[0]) > rings(&[]), "one ring should paint more cells");
+        assert!(
+            rings(&[0, 1]) > rings(&[0]),
+            "a second ring should paint more still"
+        );
+    }
+
+    #[test]
+    fn highlighting_the_same_atom_twice_draws_one_ring() {
+        let mol = create_molecule();
+
+        assert_eq!(
+            highlighted(&mol, [0]),
+            highlighted(&mol, [0, 0]),
+            "a repeated atom must collapse, not measure itself against itself"
+        );
+    }
+
+    #[test]
+    fn an_empty_highlight_list_is_the_unhighlighted_render() {
+        let mol = create_molecule();
+        let plain = render_to_buffer(&MoleculeVisualizer::new(&mol));
+
+        assert_eq!(
+            plain,
+            render_to_buffer(&MoleculeVisualizer::new(&mol).highlight([]))
+        );
+        assert_eq!(
+            plain,
+            render_to_buffer(&MoleculeVisualizer::new(&mol).highlight(None::<AtomIndex>))
+        );
+    }
+
+    #[test]
+    fn out_of_range_indices_are_dropped_from_a_mixed_selection() {
+        let mol = create_molecule();
+
+        // Only atom 0 survives, so this is a lone ring and no measurement.
+        assert_eq!(highlighted(&mol, [0, 999]), highlighted(&mol, [0]));
+    }
+
+    #[test]
+    fn highlight_style_none_suppresses_rings_and_overlay() {
+        let mol = create_molecule();
+        let plain = render_to_buffer(&MoleculeVisualizer::new(&mol));
+        let suppressed = render_to_buffer(
+            &MoleculeVisualizer::new(&mol)
+                .highlight([AtomIndex::new(0), AtomIndex::new(1)])
+                .highlight_style(None),
+        );
+
+        assert_eq!(
+            plain, suppressed,
+            "highlight_style(None) must kill the whole marker apparatus"
+        );
+    }
+
+    /// Two atoms 1.8 Å apart in the screen plane, well clear of each other.
+    fn pair() -> Molecule {
+        Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 0.9, 0.0]),
+            Atom::new(Element::O, [0.0, -0.9, 0.0]),
+        ])
+    }
+
+    #[test]
+    fn two_highlighted_atoms_draw_a_measurement() {
+        let mol = pair();
+        let with = |measure| painted_cells(&highlighted_with(&mol, [0, 1], measure));
+
+        assert!(
+            with(true) > with(false),
+            "the overlay should paint connectors and a label"
+        );
+    }
+
+    #[test]
+    fn one_highlighted_atom_draws_no_measurement() {
+        let mol = pair();
+        let one = |measure| highlighted_with(&mol, [0], measure);
+
+        assert_eq!(one(true), one(false));
+    }
+
+    #[test]
+    fn five_highlighted_atoms_draw_rings_but_no_measurement() {
+        let mol = caffeine();
+        let five = |measure| highlighted_with(&mol, 0..5, measure);
+
+        assert_eq!(five(true), five(false), "five atoms measure nothing");
+        let text = buffer_text(&five(true));
+        assert!(!text.contains('°') && !text.contains('Å'), "{text}");
+    }
+
+    #[test]
+    fn the_distance_label_prints_the_true_value() {
+        let text = buffer_text(&highlighted(&pair(), [0, 1]));
+
+        assert!(
+            text.contains("1.800 Å"),
+            "expected the distance in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn the_distance_label_is_the_3d_value_not_the_projected_one() {
+        // Both atoms lie on the viewing axis, so they project to a single point
+        // and there is no connector to draw — but the distance between them is
+        // still 1.340 Å, and that is what the reader needs.
+        let along_view = Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 0.0, -0.67]),
+            Atom::new(Element::C, [0.0, 0.0, 0.67]),
+        ]);
+        let text = buffer_text(&highlighted(&along_view, [0, 1]));
+
+        assert!(
+            text.contains("1.340 Å"),
+            "expected the 3-D distance in:\n{text}"
+        );
+    }
+
+    /// A right angle at atom 1, with atom 0 out along x and atom 2 up along y.
+    fn bent() -> Molecule {
+        Molecule::from_atoms([
+            Atom::new(Element::C, [1.4, 0.0, 0.0]),
+            Atom::new(Element::O, [0.0, 0.0, 0.0]),
+            Atom::new(Element::C, [0.0, 1.4, 0.0]),
+        ])
+    }
+
+    #[test]
+    fn three_highlighted_atoms_label_the_angle() {
+        let text = buffer_text(&highlighted(&bent(), [0, 1, 2]));
+
+        assert!(text.contains("90.0°"), "expected the angle in:\n{text}");
+    }
+
+    #[test]
+    fn the_angle_vertex_is_the_middle_highlighted_atom() {
+        let mol = bent();
+
+        // Same three atoms, different vertex: 90 degrees at atom 1, 45 at atom 0.
+        assert!(buffer_text(&highlighted(&mol, [0, 1, 2])).contains("90.0°"));
+        assert!(buffer_text(&highlighted(&mol, [1, 0, 2])).contains("45.0°"));
+    }
+
+    #[test]
+    fn four_highlighted_atoms_label_the_dihedral() {
+        let chain = Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 1.0, 0.0]),
+            Atom::new(Element::C, [0.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.5, 0.0, 0.0]),
+            Atom::new(Element::C, [1.5, 0.0, 1.0]),
+        ]);
+        let text = buffer_text(&highlighted(&chain, [0, 1, 2, 3]));
+
+        assert!(text.contains("90.0°"), "expected the dihedral in:\n{text}");
+    }
+
+    #[test]
+    fn a_degenerate_measurement_moves_no_braille_dot() {
+        // `Painter::get_point` bounds-checks a coordinate with four comparisons
+        // that are all false for NaN, then saturates the cast — so a NaN
+        // reaching `Points` paints a dot in the canvas's top-left cell instead
+        // of panicking. Comparing only the braille cells, and letting the label
+        // differ, is what catches that stray dot.
+        let along_view = Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 0.0, -0.67]),
+            Atom::new(Element::C, [0.0, 0.0, 0.67]),
+        ]);
+        let viz = |measure| highlighted_with(&along_view, [0, 1], measure);
+
+        assert_lights_no_new_cell(
+            &viz(false),
+            &viz(true),
+            "the overlay, though the atoms project to a single point,",
+        );
+
+        // And it must not have passed by drawing nothing: the value is the part
+        // the reader actually needs.
+        assert!(buffer_text(&viz(true)).contains("1.340 Å"));
+    }
+
+    #[test]
+    fn coincident_atoms_draw_no_connectors() {
+        // Every separation, arm, and axis is degenerate at once. Nothing may be
+        // drawn between the atoms, and nothing may panic on the way to deciding
+        // that — for any size of selection.
+        let stacked = Molecule::from_atoms([Atom::new(Element::C, [0.0; 3]); 4]);
+
+        for count in 1..=5 {
+            let render = |measure| highlighted_with(&stacked, 0..count, measure);
+
+            assert_lights_no_new_cell(
+                &render(false),
+                &render(true),
+                &format!("{count} coincident atoms"),
+            );
+        }
+    }
+
+    #[test]
+    fn highlighting_an_empty_molecule_is_a_no_op() {
+        let empty = Molecule::from_atoms(Vec::new());
+
+        assert_eq!(
+            render_to_buffer_at(&MoleculeVisualizer::new(&empty), wide()),
+            highlighted(&empty, 0..4),
+            "indices must be range-checked before anything indexes the atoms"
+        );
+    }
+
+    #[test]
+    fn measurement_overlay_renders_in_a_minimal_buffer() {
+        let mol = bent();
+        let viz = MoleculeVisualizer::new(&mol).highlight((0..3).map(AtomIndex::new));
+
+        // This should not panic, even with no room to draw the annotation.
+        let buffer = render_to_buffer_at(&viz, Rect::new(0, 0, 1, 1));
+        assert_eq!(buffer, Buffer::with_lines(["┌"]));
+    }
+
+    #[test]
+    fn measurement_overlay_renders_in_a_zero_size_buffer() {
+        let mol = bent();
+        let viz = MoleculeVisualizer::new(&mol).highlight((0..3).map(AtomIndex::new));
+
+        render_to_buffer_at(&viz, Rect::ZERO);
     }
 }
