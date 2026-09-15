@@ -7,7 +7,7 @@ pub(crate) fn wrap_angle(angle: f64) -> f64 {
     (angle + PI).rem_euclid(TAU) - PI
 }
 
-/// Below this length (Å) a vector is treated as having no direction rather than
+/// Below this length a vector is treated as having no direction rather than
 /// a very short one. Normalizing it would divide by ~zero and leak `NaN` into
 /// the canvas, so callers return `None` instead.
 pub(crate) const DEGENERATE_LENGTH: f64 = 1e-9;

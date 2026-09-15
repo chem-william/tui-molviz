@@ -188,7 +188,7 @@ impl MoleculeCanvas {
     /// selection.toggle(AtomIndex::new(1));
     ///
     /// let measured = Measurement::of(&molecule, &selection)?.expect("two atoms");
-    /// assert_eq!(measured.to_string(), "O0–H1  0.957 Å");
+    /// assert_eq!(measured.to_string(), "O0–H1  0.957");
     ///
     /// let _next = MoleculeVisualizer::new(&molecule).camera(camera).highlight(&selection);
     /// # Ok::<(), tui_molviz::MeasurementError>(())
@@ -254,7 +254,7 @@ impl MoleculeCanvas {
     }
 
     /// Convert a terminal-cell delta into
-    /// [`Camera::translate`](crate::camera::Camera::translate) units (Å in the
+    /// [`Camera::translate`](crate::camera::Camera::translate) units (in the
     /// screen plane), for panning. This is how a mouse-drag delta in cells
     /// becomes a camera pan: translate by this on each move event.
     ///
@@ -1402,7 +1402,7 @@ mod tests {
         );
     }
 
-    /// A two-carbon molecule with an explicit bond `order`, the atoms `d` (Å)
+    /// A two-carbon molecule with an explicit bond `order`, the atoms `d`
     /// apart along the x-axis.
     fn diatomic(order: BondOrder, d: f64) -> Molecule {
         Molecule::from_atoms_with_bonds(
@@ -1715,17 +1715,14 @@ mod tests {
 
         assert_eq!(five(true), five(false), "five atoms measure nothing");
         let text = buffer_text(&five(true));
-        assert!(!text.contains('°') && !text.contains('Å'), "{text}");
+        assert!(!text.contains('°'), "{text}");
     }
 
     #[test]
     fn the_distance_label_prints_the_true_value() {
         let text = buffer_text(&highlighted(&pair(), [0, 1]));
 
-        assert!(
-            text.contains("1.800 Å"),
-            "expected the distance in:\n{text}"
-        );
+        assert!(text.contains("1.800"), "expected the distance in:\n{text}");
     }
 
     #[test]
@@ -1740,7 +1737,7 @@ mod tests {
         let text = buffer_text(&highlighted(&along_view, [0, 1]));
 
         assert!(
-            text.contains("1.340 Å"),
+            text.contains("1.340"),
             "expected the 3-D distance in:\n{text}"
         );
     }
@@ -1804,7 +1801,7 @@ mod tests {
 
         // And it must not have passed by drawing nothing: the value is the part
         // the reader actually needs.
-        assert!(buffer_text(&viz(true)).contains("1.340 Å"));
+        assert!(buffer_text(&viz(true)).contains("1.340"));
     }
 
     #[test]

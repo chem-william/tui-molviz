@@ -11,7 +11,7 @@ use crate::measurement::MeasurementError;
 pub struct Atom {
     element: Element,
     position: [f64; 3],
-    covalent_radius: f64, // bonding radius (Å)
+    covalent_radius: f64, // bonding radius
 }
 
 impl Atom {
@@ -294,7 +294,7 @@ pub struct Molecule {
 }
 
 impl Molecule {
-    /// Below this separation (Å), atoms are treated as coincident (e.g.
+    /// Below this separation, atoms are treated as coincident (e.g.
     /// duplicate input) rather than bonded.
     const MIN_BOND_DISTANCE: f64 = 0.4;
     /// Bond-order cutoffs, as a ratio of interatomic distance to the atoms'
@@ -325,7 +325,7 @@ impl Molecule {
     }
 
     /// The [`BondOrder`] perceived for two atoms with summed covalent radius
-    /// `sum_radii` (Å) separated by `d` (Å), or `None` when the pair is too
+    /// `sum_radii` separated by `d`, or `None` when the pair is too
     /// close to be distinct atoms or too far apart to be bonded.
     fn perceived_order(sum_radii: f64, d: f64) -> Option<BondOrder> {
         if d <= Self::MIN_BOND_DISTANCE {
@@ -729,7 +729,7 @@ mod tests {
         assert_eq!(format!("{index}"), "7");
     }
 
-    /// A two-atom molecule with `a` at the origin and `b` a distance `d` (Å)
+    /// A two-atom molecule with `a` at the origin and `b` a distance `d`
     /// along the x-axis, using the elements' default covalent radii.
     fn diatomic(a: Element, b: Element, d: f64) -> Molecule {
         Molecule::from_atoms([Atom::new(a, [0.0, 0.0, 0.0]), Atom::new(b, [d, 0.0, 0.0])])

@@ -39,7 +39,7 @@ pub enum MeasurementError {
 ///
 /// let measured = Measurement::of(&carbonyl, [AtomIndex::new(0), AtomIndex::new(1)])?
 ///     .expect("two atoms measure a distance");
-/// assert_eq!(measured.to_string(), "C0–O1  1.210 Å");
+/// assert_eq!(measured.to_string(), "C0–O1  1.210");
 ///
 /// // Fewer than two atoms is not an error — there is just nothing to measure.
 /// assert_eq!(Measurement::of(&carbonyl, [AtomIndex::new(0)])?, None);
@@ -318,7 +318,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .to_string(),
-            "C0–O1  1.210 Å"
+            "C0–O1  1.210"
         );
         assert_eq!(
             Measurement::of(&mol, indices([0, 1, 2]))

@@ -100,7 +100,7 @@ impl Camera {
         self.pitch.cos() < 0.0
     }
 
-    /// Shifts the view by `dx` right and `dy` up, in units of atom coordinates (Å).
+    /// Shifts the view by `dx` right and `dy` up, in units of atom coordinates.
     /// The offset lives in the screen plane, applied after the rotation, so panning
     /// and then rotating orbits around the panned center.
     ///
@@ -129,7 +129,7 @@ impl Camera {
     }
 
     /// The current screen offset (right, up), in units of atom
-    /// coordinates (Å). `offset()` of a fresh camera is `(0.0, 0.0)`.
+    /// coordinates. `offset()` of a fresh camera is `(0.0, 0.0)`.
     #[must_use]
     pub fn offset(self) -> (f64, f64) {
         (self.tx, self.ty)
