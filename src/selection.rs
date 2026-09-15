@@ -6,8 +6,8 @@ use crate::molecule::AtomIndex;
 
 /// The atoms a user has picked, in the order they picked them.
 ///
-/// Order is the point: it is what makes the middle of three atoms an angle's
-/// vertex, and the middle two of four a dihedral's axis. Feed a `Selection`
+/// The order is important. The middle of three atoms is an angle's
+/// vertex, and the middle two of four is a dihedral's axis. Feed a `Selection`
 /// straight to [`Measurement::of`](crate::Measurement::of) to read the
 /// corresponding quantity, and to
 /// [`MoleculeVisualizer::highlight`](crate::MoleculeVisualizer::highlight) to
@@ -43,8 +43,7 @@ use crate::molecule::AtomIndex;
 /// ```
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Selection {
-    // A `Vec` rather than a set: insertion order is contractual, and a
-    // selection is a handful of atoms, so the linear `contains` is free.
+    // A `Vec` rather than a set as insertion order is important.
     atoms: Vec<AtomIndex>,
     limit: Option<usize>,
 }

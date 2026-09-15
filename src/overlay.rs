@@ -4,13 +4,6 @@
 //! screen positions of the measured atoms and hands back braille points and
 //! text labels. It knows nothing about the widget, the molecule, or the camera,
 //! which is what lets it be tested without rendering anything.
-//!
-//! One honesty note runs through the whole module. The dashes and the arc are
-//! drawn in the *projection*, because they have to touch the atoms they
-//! annotate; the number beside them is measured in the molecule's true 3-D
-//! coordinates. Rotating the camera therefore opens and closes the arc while
-//! the printed angle holds still. The drawing is a locator — it says *which*
-//! quantity the number describes — not a second rendering of the value.
 
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
@@ -157,11 +150,6 @@ pub(crate) fn measurement(
 }
 
 /// Whether a computed length can be divided by: finite, and strictly positive.
-///
-/// Every normalization below goes through this first. `is_finite` is what
-/// rejects NaN — a NaN length would sail through a bare `> 0.0` test and end up
-/// as a NaN coordinate, which ratatui paints in the canvas corner rather than
-/// rejecting.
 fn usable_length(len: f64) -> bool {
     len.is_finite() && len > 0.0
 }
@@ -193,8 +181,7 @@ fn anchored_between(
 /// taken off.
 ///
 /// `None` when the two anchors project to (nearly) the same point, or the
-/// clearances swallow the segment. That guard is what keeps a zero-length
-/// normalization — and the NaNs it would produce — off the canvas.
+/// clearances swallow the segment.
 fn span(m: Metrics, a: Anchor, b: Anchor) -> Option<((f64, f64), f64, f64)> {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let len = dx.hypot(dy);

@@ -1,8 +1,4 @@
 //! Scalar and vector maths on raw `[f64; 3]` atom coordinates.
-//!
-//! The crate deliberately carries no linear-algebra dependency — these few
-//! helpers are everything the visualizer and the measurements need. They live
-//! together so that interatomic distance is computed in exactly one place.
 
 use std::f64::consts::{PI, TAU};
 
@@ -51,7 +47,7 @@ fn reject(v: [f64; 3], axis: [f64; 3]) -> [f64; 3] {
 ///
 /// `None` when either arm is shorter than [`DEGENERATE_LENGTH`] — an atom sits
 /// on the vertex, so its arm points nowhere. Collinear atoms are *not*
-/// degenerate: they are a perfectly good straight angle.
+/// degenerate as they just have a perfectly straight angle.
 pub(crate) fn angle(a: [f64; 3], vertex: [f64; 3], c: [f64; 3]) -> Option<f64> {
     let (u, v) = (sub(a, vertex), sub(c, vertex));
     let (lu, lv) = (norm(u), norm(v));
@@ -59,7 +55,7 @@ pub(crate) fn angle(a: [f64; 3], vertex: [f64; 3], c: [f64; 3]) -> Option<f64> {
         return None;
     }
 
-    // Rounding can push the cosine a hair outside [-1, 1] for (anti)parallel
+    // Rounding can push the cosine outside [-1, 1] for (anti)parallel
     // arms, where `acos` returns NaN. Clamping keeps an exactly straight angle
     // reading as PI instead of poisoning every value derived from it.
     Some((dot(u, v) / (lu * lv)).clamp(-1.0, 1.0).acos())
@@ -124,7 +120,7 @@ mod tests {
         let right = angle([1.0, 0.0, 0.0], [0.0; 3], [0.0, 1.0, 0.0]).unwrap();
         assert_close(right, FRAC_PI_2, "right angle");
 
-        // Water's H–O–H, with the oxygen as the vertex.
+        // Oxygen is the vertex.
         let water = angle(
             [0.9572, 0.0000, 0.0000],
             [0.0000, 0.0000, 0.0000],

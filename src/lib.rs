@@ -114,7 +114,7 @@ impl MoleculeCanvas {
     }
 
     /// One braille dot, in canvas-data units.
-    pub(crate) fn dot(&self) -> f64 {
+    pub(crate) const fn braille_dot(&self) -> f64 {
         1.0 / self.dpu
     }
 
@@ -458,11 +458,8 @@ impl<'a> MoleculeVisualizer<'a> {
     /// drawing dashed connectors and printing the value on the canvas. Default
     /// is `true`; it draws nothing until at least two atoms are highlighted.
     ///
-    /// The connectors and the arc are drawn in the projection, so they meet the
-    /// atoms on screen, but the printed number is measured in the molecule's
-    /// true 3-D coordinates. Rotating the camera therefore opens and closes the
-    /// arc while the number holds still: it marks *which* angle is meant rather
-    /// than redrawing its value.
+    /// The connectors and the arc are drawn in the projection, but the printed number
+    /// is measured in the molecule's true 3-D coordinates.
     ///
     /// The value is the one [`Measurement::of`] returns for the same atoms, so a
     /// status line built from that agrees with the canvas.
@@ -567,9 +564,8 @@ impl MoleculeVisualizer<'_> {
     /// The highlighted atoms that actually exist, in highlight order, with
     /// repeats collapsed onto their first occurrence.
     ///
-    /// The order is contractual — the middle of three is the angle's vertex, the
-    /// middle two of four the dihedral's axis — so this deduplicates without
-    /// reordering, which a set would not.
+    /// The middle of three is the angle's vertex, the middle two of four the
+    /// dihedral's axis.
     fn highlighted_indices(&self) -> Vec<AtomIndex> {
         let mut selected = Vec::with_capacity(self.highlight.len());
         for &index in &self.highlight {
@@ -597,11 +593,10 @@ impl MoleculeVisualizer<'_> {
         proj: &[(f64, f64, f64)],
         canvas: &MoleculeCanvas,
     ) -> Vec<(f64, f64)> {
-        let dot = canvas.dot(); // one braille dot, in world units
         let steps = Self::HIGHLIGHT_RING_STEPS;
         let mut pts = Vec::with_capacity(selected.len() * steps as usize);
         for &i in selected {
-            let r_ring = self.ring_radius_dots(canvas, i) * dot;
+            let r_ring = self.ring_radius_dots(canvas, i) * canvas.braille_dot();
             let (px, py, _) = proj[i.get()];
             pts.extend((0..steps).map(|k| {
                 let theta = std::f64::consts::TAU * f64::from(k) / f64::from(steps);
@@ -630,7 +625,6 @@ impl MoleculeVisualizer<'_> {
         // canvas label and the status line cannot disagree.
         let value = Measurement::of(self.molecule, selected).ok().flatten()?;
 
-        let dot = canvas.dot();
         let (bx, by) = canvas.half_bounds();
         let anchors: Vec<overlay::Anchor> = selected
             .iter()
@@ -641,12 +635,21 @@ impl MoleculeVisualizer<'_> {
                 overlay::Anchor {
                     x,
                     y,
-                    clearance: clearance * dot,
+                    clearance: clearance * canvas.braille_dot(),
                 }
             })
             .collect();
 
-        overlay::measurement(overlay::Metrics { dot, bx, by }, &anchors, &value, color)
+        overlay::measurement(
+            overlay::Metrics {
+                dot: canvas.braille_dot(),
+                bx,
+                by,
+            },
+            &anchors,
+            &value,
+            color,
+        )
     }
 
     /// A color key for the elements actually in the molecule (each element's
@@ -718,8 +721,6 @@ impl MoleculeVisualizer<'_> {
             return Vec::new();
         }
 
-        // One braille dot, in world units.
-        let dot = canvas.dot();
         let mut lines = Vec::with_capacity(self.molecule.bonds().len() * 3);
         for &bond in self.molecule.bonds() {
             let (s, e) = (bond.start().get(), bond.end().get());
@@ -746,9 +747,9 @@ impl MoleculeVisualizer<'_> {
             // When the bond points almost at the viewer (projected length
             // below a couple of dots) a perpendicular offset is noise, so
             // it collapses to a single line.
-            let parallel = len >= Self::BOND_MIN_PARALLEL_LENGTH_DOTS * dot;
+            let parallel = len >= Self::BOND_MIN_PARALLEL_LENGTH_DOTS * canvas.braille_dot();
             if parallel && order != BondOrder::Single {
-                let off = Self::BOND_PARALLEL_OFFSET_DOTS * dot;
+                let off = Self::BOND_PARALLEL_OFFSET_DOTS * canvas.braille_dot();
                 let (nx, ny) = (-dy / len * off, dx / len * off);
                 for (ox, oy) in [(nx, ny), (-nx, -ny)] {
                     push_line(x1 + ox, y1 + oy, x2 + ox, y2 + oy);
@@ -809,9 +810,6 @@ impl MoleculeVisualizer<'_> {
             .copied()
             .fold(f64::NEG_INFINITY, f64::max);
 
-        // One braille dot, in world units.
-        let dot = canvas.dot();
-
         // Bond lines are drawn before the atoms, so the atom disks still
         // occlude the bond ends.
         let bond_lines = self.bond_lines(&proj, &canvas, zmin, zmax);
@@ -837,8 +835,8 @@ impl MoleculeVisualizer<'_> {
                 for dj in -n..=n {
                     if f64::from(di * di + dj * dj) <= r_dots * r_dots {
                         pts.push((
-                            proj[i].0 + f64::from(di) * dot,
-                            proj[i].1 + f64::from(dj) * dot,
+                            proj[i].0 + f64::from(di) * canvas.braille_dot(),
+                            proj[i].1 + f64::from(dj) * canvas.braille_dot(),
                         ));
                     }
                 }
@@ -885,8 +883,6 @@ impl MoleculeVisualizer<'_> {
                             color: measurement.color,
                         });
                     }
-                    // The paint closure is `Fn`, not `FnOnce`, so the label is
-                    // cloned rather than moved out.
                     let (x, y, line) = &measurement.label;
                     ctx.print(*x, *y, line.clone());
                 }

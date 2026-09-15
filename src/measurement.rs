@@ -48,7 +48,7 @@ pub enum MeasurementError {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum Measurement {
-    /// The distance between two atoms, in Ångström.
+    /// The distance between two atoms.
     Distance {
         atoms: [AtomIndex; 2],
         elements: [Element; 2],
@@ -77,9 +77,8 @@ impl Measurement {
     /// `[a, b, c]` and `[b, a, c]` are different angles.
     ///
     /// Positions are measured as the molecule stores them. [`Molecule`]
-    /// recenters its atoms on their centroid at construction, but every
-    /// quantity here is translation-invariant, so the results match the
-    /// coordinates that were handed in.
+    /// recenters its atoms on their centroid at construction, so the results
+    /// match the coordinates that were handed in.
     ///
     /// # Errors
     ///
@@ -144,7 +143,7 @@ impl Measurement {
         }
     }
 
-    /// The measured value: Ångström for a distance, radians for an angle or a
+    /// The measured value: distance units for a distance, radians for an angle or a
     /// dihedral. Use [`degrees`](Self::degrees) for the angular variants.
     #[must_use]
     pub fn value(&self) -> f64 {
@@ -159,7 +158,7 @@ impl Measurement {
     pub(crate) fn value_label(&self) -> String {
         match self.degrees() {
             Some(degrees) => format!("{degrees:.1}°"),
-            None => format!("{:.3} Å", self.value()),
+            None => format!("{:.3}", self.value()),
         }
     }
 

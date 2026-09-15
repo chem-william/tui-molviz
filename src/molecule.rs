@@ -480,7 +480,7 @@ impl Molecule {
         self.atoms.get(index.get())
     }
 
-    /// The distance between two atoms, in Ångström.
+    /// The distance between two atoms.
     ///
     /// The atoms are recentered on their centroid at construction, but distance
     /// is translation-invariant, so this is the distance in the coordinates that
@@ -517,8 +517,7 @@ impl Molecule {
     ///
     /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
     /// list, and [`MeasurementError::Degenerate`] if an atom sits on the vertex,
-    /// leaving an arm with no direction. Collinear atoms are not degenerate —
-    /// they measure `PI`.
+    /// leaving an arm with no direction. Collinear atoms measure `PI`.
     ///
     /// # Example
     ///

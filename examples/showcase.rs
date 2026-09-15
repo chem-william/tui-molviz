@@ -243,27 +243,21 @@ impl App {
             return;
         };
         match canvas.pick_atom(self.camera, &self.molecule, (col, row)) {
-            // Clicking an atom picks it up, or puts it back down if it was
+            // Clicking an unselected atom selects it, or deselects it if
             // already selected. Once four are picked, further atoms are ignored
             // until one is released.
             Some(hit) => {
                 self.selection.toggle(hit);
             }
-            // A click on empty space clears the selection.
             None => self.selection.clear(),
         }
     }
 
     /// What the selection reads as in the status line: the measured quantity
     /// once two to four atoms are picked, otherwise just what is selected.
-    ///
-    /// This is the same call the widget makes to label the canvas, so the two
-    /// always agree.
     fn selection_label(&self) -> String {
         match Measurement::of(&self.molecule, &self.selection) {
             Ok(Some(measured)) => measured.to_string(),
-            // Only reachable for atoms too nearly collinear to define a torsion.
-            Err(_) => "undefined".to_string(),
             Ok(None) if self.selection.is_empty() => "none".to_string(),
             Ok(None) => self
                 .selection
@@ -274,6 +268,7 @@ impl App {
                 })
                 .collect::<Vec<_>>()
                 .join(" "),
+            Err(_) => "undefined".to_string(),
         }
     }
 }

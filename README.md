@@ -50,7 +50,7 @@ Bonds are perceived from interatomic distances and drawn by their order - single
 
 The camera can be rotated (`Camera::rotate`), zoomed (`Camera::zoom_by`), and panned (`Camera::translate`). Hit-test terminal cells back to atoms with `MoleculeCanvas::pick_atom` for selection.
 
-Collect picked atoms into a `Selection` and hand it to `MoleculeVisualizer::highlight` to ring them. Two, three, or four selected atoms also measure a distance, an angle, or a dihedral: `Measurement::of` returns the value ready to print in your own status line, and the widget labels it on the canvas. `Molecule::distance`, `Molecule::angle`, and `Molecule::dihedral` compute the same quantities directly.
+Collect picked atoms into a `Selection` and hand it to `MoleculeVisualizer::highlight` to draw a ring around them. Two, three, or four selected atoms also measure a distance, an angle, or a dihedral: `Measurement::of` returns the value ready to print, and the widget labels it on the canvas. `Molecule::distance`, `Molecule::angle`, and `Molecule::dihedral` compute the same quantities directly.
 
 ```rust
 use tui_molviz::{AtomIndex, Measurement, Selection};
