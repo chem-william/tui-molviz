@@ -18,6 +18,9 @@ pub enum MeasurementError {
     /// plane, so the quantity is undefined rather than merely extreme.
     #[error("the selected atoms are coincident or collinear, so the measurement is undefined")]
     Degenerate,
+    /// Arithmetic on the coordinates produced a NaN or infinite result.
+    #[error("the measurement cannot be represented as a finite number")]
+    NonFinite,
 }
 
 /// A quantity measured over two, three, or four atoms.
@@ -85,6 +88,7 @@ impl Measurement {
     /// [`MeasurementError::AtomOutOfRange`] if an index does not name an atom of
     /// `molecule`, and [`MeasurementError::Degenerate`] if the atoms are too
     /// close together, or too nearly collinear, for the quantity to be defined.
+    /// [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
     ///
     /// Zero, one, or more than four atoms is `Ok(None)` as it's a selection
     /// in-progress.

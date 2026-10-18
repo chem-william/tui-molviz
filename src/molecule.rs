@@ -7,6 +7,11 @@ use thiserror::Error;
 use crate::geometry;
 use crate::measurement::MeasurementError;
 
+/// An atom position contains a NaN or infinite coordinate.
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error("atom coordinates must be finite")]
+pub struct InvalidPositionError;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Atom {
     element: Element,
@@ -16,13 +21,41 @@ pub struct Atom {
 
 impl Atom {
     /// Creates a new `Atom` from the given [`Element`] and `position`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any coordinate is NaN or infinite. Use [`Self::try_new`] for
+    /// coordinates read from input.
     #[must_use]
     pub fn new(element: Element, position: [f64; 3]) -> Self {
-        Self {
+        Self::try_new(element, position).expect("atom coordinates must be finite")
+    }
+
+    /// Creates an atom with finite coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidPositionError`] if any coordinate is NaN or infinite.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tui_molviz::{Element, molecule::Atom};
+    ///
+    /// let atom = Atom::try_new(Element::C, [1.0, 2.0, 3.0])?;
+    /// assert_eq!(atom.position(), [1.0, 2.0, 3.0]);
+    /// assert!(Atom::try_new(Element::C, [f64::NAN, 0.0, 0.0]).is_err());
+    /// # Ok::<(), tui_molviz::molecule::InvalidPositionError>(())
+    /// ```
+    pub fn try_new(element: Element, position: [f64; 3]) -> Result<Self, InvalidPositionError> {
+        if !position.iter().all(|coordinate| coordinate.is_finite()) {
+            return Err(InvalidPositionError);
+        }
+        Ok(Self {
             element,
             position,
             covalent_radius: Self::bond_radius(element),
-        }
+        })
     }
 
     /// Computes the [`CpkColor`] from the [`Element`] of [`Self`].
@@ -489,7 +522,7 @@ impl Molecule {
     /// # Errors
     ///
     /// [`MeasurementError::AtomOutOfRange`] if either index is outside the atom
-    /// list.
+    /// list, or [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
     ///
     /// # Example
     ///
@@ -507,7 +540,7 @@ impl Molecule {
     /// # Ok::<(), tui_molviz::MeasurementError>(())
     /// ```
     pub fn distance(&self, a: AtomIndex, b: AtomIndex) -> Result<f64, MeasurementError> {
-        Ok(geometry::distance(self.position(a)?, self.position(b)?))
+        Self::finite_measurement(geometry::distance(self.position(a)?, self.position(b)?))
     }
 
     /// The angle at `vertex` between the arms reaching `a` and `c`, in radians
@@ -518,6 +551,7 @@ impl Molecule {
     /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
     /// list, and [`MeasurementError::Degenerate`] if an atom sits on the vertex,
     /// leaving an arm with no direction. Collinear atoms measure `PI`.
+    /// [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
     ///
     /// # Example
     ///
@@ -542,8 +576,9 @@ impl Molecule {
         vertex: AtomIndex,
         c: AtomIndex,
     ) -> Result<f64, MeasurementError> {
-        geometry::angle(self.position(a)?, self.position(vertex)?, self.position(c)?)
-            .ok_or(MeasurementError::Degenerate)
+        let value = geometry::angle(self.position(a)?, self.position(vertex)?, self.position(c)?)
+            .ok_or(MeasurementError::Degenerate)?;
+        Self::finite_measurement(value)
     }
 
     /// The signed dihedral of `a`-`b`-`c`-`d` about the `b`–`c` axis, in radians
@@ -555,6 +590,7 @@ impl Molecule {
     /// list, and [`MeasurementError::Degenerate`] if the axis is degenerate or a
     /// terminal atom lies on it, leaving no plane to measure the torsion
     /// between.
+    /// [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
     ///
     /// # Example
     ///
@@ -583,13 +619,22 @@ impl Molecule {
         c: AtomIndex,
         d: AtomIndex,
     ) -> Result<f64, MeasurementError> {
-        geometry::dihedral(
+        let value = geometry::dihedral(
             self.position(a)?,
             self.position(b)?,
             self.position(c)?,
             self.position(d)?,
         )
-        .ok_or(MeasurementError::Degenerate)
+        .ok_or(MeasurementError::Degenerate)?;
+        Self::finite_measurement(value)
+    }
+
+    fn finite_measurement(value: f64) -> Result<f64, MeasurementError> {
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(MeasurementError::NonFinite)
+        }
     }
 
     fn position(&self, index: AtomIndex) -> Result<[f64; 3], MeasurementError> {
@@ -670,6 +715,57 @@ mod tests {
     use mendeleev::Element;
 
     use super::*;
+
+    #[test]
+    fn atom_rejects_nonfinite_coordinates_on_every_axis() {
+        for coordinate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for axis in 0..3 {
+                let mut position = [1.0, 2.0, 3.0];
+                position[axis] = coordinate;
+                assert_eq!(
+                    Atom::try_new(Element::C, position),
+                    Err(InvalidPositionError)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn atom_preserves_finite_coordinates_and_element() {
+        let position = [f64::MIN, -0.0, f64::MAX];
+        let atom = Atom::try_new(Element::O, position).expect("finite coordinates");
+        assert_eq!(atom.position(), position);
+        assert_eq!(atom.element(), Element::O);
+        assert!(atom.position()[1].is_sign_negative());
+        assert!(atom.covalent_radius().is_finite());
+    }
+
+    #[test]
+    #[should_panic(expected = "atom coordinates must be finite")]
+    fn infallible_atom_constructor_also_rejects_nonfinite_coordinates() {
+        let _ = Atom::new(Element::C, [0.0, f64::NAN, 0.0]);
+    }
+
+    #[test]
+    fn measurements_reject_nonfinite_results_from_finite_coordinates() {
+        let molecule = Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 1e200, 1e200]),
+            Atom::new(Element::C, [0.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.0, 1e200, 1e200]),
+        ]);
+        let [a, b, c, d] = [0, 1, 2, 3].map(AtomIndex::new);
+        assert_eq!(molecule.distance(a, b), Err(MeasurementError::NonFinite));
+        assert_eq!(molecule.angle(a, b, d), Err(MeasurementError::NonFinite));
+        assert_eq!(
+            molecule.dihedral(a, b, c, d),
+            Err(MeasurementError::NonFinite)
+        );
+        assert_eq!(
+            crate::Measurement::of(&molecule, [a, b, c, d]),
+            Err(MeasurementError::NonFinite)
+        );
+    }
 
     fn create_molecule() -> Molecule {
         let atoms = vec![
