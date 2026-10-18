@@ -4,22 +4,58 @@ use mendeleev::Color as CpkColor;
 use mendeleev::{Element, Picometer};
 use thiserror::Error;
 
+use crate::geometry;
+use crate::measurement::MeasurementError;
+
+/// An atom position contains a NaN or infinite coordinate.
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error("atom coordinates must be finite")]
+pub struct InvalidPositionError;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Atom {
     element: Element,
     position: [f64; 3],
-    covalent_radius: f64, // bonding radius (Å)
+    covalent_radius: f64, // bonding radius
 }
 
 impl Atom {
     /// Creates a new `Atom` from the given [`Element`] and `position`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any coordinate is NaN or infinite. Use [`Self::try_new`] for
+    /// coordinates read from input.
     #[must_use]
     pub fn new(element: Element, position: [f64; 3]) -> Self {
-        Self {
+        Self::try_new(element, position).expect("atom coordinates must be finite")
+    }
+
+    /// Creates an atom with finite coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidPositionError`] if any coordinate is NaN or infinite.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tui_molviz::{Element, molecule::Atom};
+    ///
+    /// let atom = Atom::try_new(Element::C, [1.0, 2.0, 3.0])?;
+    /// assert_eq!(atom.position(), [1.0, 2.0, 3.0]);
+    /// assert!(Atom::try_new(Element::C, [f64::NAN, 0.0, 0.0]).is_err());
+    /// # Ok::<(), tui_molviz::molecule::InvalidPositionError>(())
+    /// ```
+    pub fn try_new(element: Element, position: [f64; 3]) -> Result<Self, InvalidPositionError> {
+        if !position.iter().all(|coordinate| coordinate.is_finite()) {
+            return Err(InvalidPositionError);
+        }
+        Ok(Self {
             element,
             position,
             covalent_radius: Self::bond_radius(element),
-        }
+        })
     }
 
     /// Computes the [`CpkColor`] from the [`Element`] of [`Self`].
@@ -291,7 +327,7 @@ pub struct Molecule {
 }
 
 impl Molecule {
-    /// Below this separation (Å), atoms are treated as coincident (e.g.
+    /// Below this separation, atoms are treated as coincident (e.g.
     /// duplicate input) rather than bonded.
     const MIN_BOND_DISTANCE: f64 = 0.4;
     /// Bond-order cutoffs, as a ratio of interatomic distance to the atoms'
@@ -310,10 +346,7 @@ impl Molecule {
         for i in 0..atoms.len() {
             for j in (i + 1)..atoms.len() {
                 let (a, b) = (&atoms[i], &atoms[j]);
-                let d = ((a.position()[0] - b.position()[0]).powi(2)
-                    + (a.position()[1] - b.position()[1]).powi(2)
-                    + (a.position()[2] - b.position()[2]).powi(2))
-                .sqrt();
+                let d = geometry::distance(a.position(), b.position());
                 if let Some(order) =
                     Self::perceived_order(a.covalent_radius() + b.covalent_radius(), d)
                 {
@@ -325,7 +358,7 @@ impl Molecule {
     }
 
     /// The [`BondOrder`] perceived for two atoms with summed covalent radius
-    /// `sum_radii` (Å) separated by `d` (Å), or `None` when the pair is too
+    /// `sum_radii` separated by `d`, or `None` when the pair is too
     /// close to be distinct atoms or too far apart to be bonded.
     fn perceived_order(sum_radii: f64, d: f64) -> Option<BondOrder> {
         if d <= Self::MIN_BOND_DISTANCE {
@@ -370,12 +403,7 @@ impl Molecule {
     fn bounding_radius(atoms: &[Atom]) -> f64 {
         atoms
             .iter()
-            .map(|a| {
-                (a.position()[0] * a.position()[0]
-                    + a.position()[1] * a.position()[1]
-                    + a.position()[2] * a.position()[2])
-                    .sqrt()
-            })
+            .map(|a| geometry::norm(a.position()))
             .fold(0.0_f64, f64::max)
             .max(1.0)
     }
@@ -463,6 +491,161 @@ impl Molecule {
         self.radius
     }
 
+    /// The atom at `index`, or `None` if the index is outside the atom list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// assert_eq!(water.get(AtomIndex::new(0)).map(Atom::element), Some(Element::O));
+    /// assert_eq!(water.get(AtomIndex::new(9)), None);
+    /// ```
+    #[must_use]
+    pub fn get(&self, index: AtomIndex) -> Option<&Atom> {
+        self.atoms.get(index.get())
+    }
+
+    /// The distance between two atoms.
+    ///
+    /// The atoms are recentered on their centroid at construction, but distance
+    /// is translation-invariant, so this is the distance in the coordinates that
+    /// were handed in.
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if either index is outside the atom
+    /// list, or [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let carbonyl = Molecule::from_atoms([
+    ///     Atom::new(Element::C, [0.00, 0.0, 0.0]),
+    ///     Atom::new(Element::O, [1.21, 0.0, 0.0]),
+    /// ]);
+    ///
+    /// let d = carbonyl.distance(AtomIndex::new(0), AtomIndex::new(1))?;
+    /// assert!((d - 1.21).abs() < 1e-12);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn distance(&self, a: AtomIndex, b: AtomIndex) -> Result<f64, MeasurementError> {
+        Self::finite_measurement(geometry::distance(self.position(a)?, self.position(b)?))
+    }
+
+    /// The angle at `vertex` between the arms reaching `a` and `c`, in radians
+    /// over `[0, PI]`. Convert with [`f64::to_degrees`].
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
+    /// list, and [`MeasurementError::Degenerate`] if an atom sits on the vertex,
+    /// leaving an arm with no direction. Collinear atoms measure `PI`.
+    /// [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// let water = Molecule::from_atoms([
+    ///     Atom::new(Element::O, [0.0000, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [0.9572, 0.0000, 0.0000]),
+    ///     Atom::new(Element::H, [-0.2390, 0.9270, 0.0000]),
+    /// ]);
+    ///
+    /// // The oxygen is the vertex, so it goes in the middle.
+    /// let hoh = water.angle(AtomIndex::new(1), AtomIndex::new(0), AtomIndex::new(2))?;
+    /// assert!((hoh.to_degrees() - 104.5).abs() < 0.1);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn angle(
+        &self,
+        a: AtomIndex,
+        vertex: AtomIndex,
+        c: AtomIndex,
+    ) -> Result<f64, MeasurementError> {
+        let value = geometry::angle(self.position(a)?, self.position(vertex)?, self.position(c)?)
+            .ok_or(MeasurementError::Degenerate)?;
+        Self::finite_measurement(value)
+    }
+
+    /// The signed dihedral of `a`-`b`-`c`-`d` about the `b`–`c` axis, in radians
+    /// over `(-PI, PI]`, following the IUPAC sign convention.
+    ///
+    /// # Errors
+    ///
+    /// [`MeasurementError::AtomOutOfRange`] if an index is outside the atom
+    /// list, and [`MeasurementError::Degenerate`] if the axis is degenerate or a
+    /// terminal atom lies on it, leaving no plane to measure the torsion
+    /// between.
+    /// [`MeasurementError::NonFinite`] if coordinate arithmetic overflows.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tui_molviz::molecule::{Atom, AtomIndex, Molecule};
+    /// use tui_molviz::Element;
+    ///
+    /// // A right-angled torsion: the two end atoms sit in perpendicular planes.
+    /// let mol = Molecule::from_atoms([
+    ///     Atom::new(Element::C, [0.0, 1.0, 0.0]),
+    ///     Atom::new(Element::C, [0.0, 0.0, 0.0]),
+    ///     Atom::new(Element::C, [1.5, 0.0, 0.0]),
+    ///     Atom::new(Element::C, [1.5, 0.0, 1.0]),
+    /// ]);
+    ///
+    /// let torsion = mol.dihedral(
+    ///     AtomIndex::new(0), AtomIndex::new(1), AtomIndex::new(2), AtomIndex::new(3),
+    /// )?;
+    /// assert!((torsion.to_degrees() - 90.0).abs() < 1e-9);
+    /// # Ok::<(), tui_molviz::MeasurementError>(())
+    /// ```
+    pub fn dihedral(
+        &self,
+        a: AtomIndex,
+        b: AtomIndex,
+        c: AtomIndex,
+        d: AtomIndex,
+    ) -> Result<f64, MeasurementError> {
+        let value = geometry::dihedral(
+            self.position(a)?,
+            self.position(b)?,
+            self.position(c)?,
+            self.position(d)?,
+        )
+        .ok_or(MeasurementError::Degenerate)?;
+        Self::finite_measurement(value)
+    }
+
+    fn finite_measurement(value: f64) -> Result<f64, MeasurementError> {
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(MeasurementError::NonFinite)
+        }
+    }
+
+    fn position(&self, index: AtomIndex) -> Result<[f64; 3], MeasurementError> {
+        self.get(index)
+            .map(Atom::position)
+            .ok_or(MeasurementError::AtomOutOfRange {
+                index,
+                atom_count: self.atoms.len(),
+            })
+    }
+
     /// Returns an iterator over the molecule's atoms.
     ///
     /// Atoms are yielded in the order they were supplied at construction, so an
@@ -533,6 +716,57 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn atom_rejects_nonfinite_coordinates_on_every_axis() {
+        for coordinate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for axis in 0..3 {
+                let mut position = [1.0, 2.0, 3.0];
+                position[axis] = coordinate;
+                assert_eq!(
+                    Atom::try_new(Element::C, position),
+                    Err(InvalidPositionError)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn atom_preserves_finite_coordinates_and_element() {
+        let position = [f64::MIN, -0.0, f64::MAX];
+        let atom = Atom::try_new(Element::O, position).expect("finite coordinates");
+        assert_eq!(atom.position(), position);
+        assert_eq!(atom.element(), Element::O);
+        assert!(atom.position()[1].is_sign_negative());
+        assert!(atom.covalent_radius().is_finite());
+    }
+
+    #[test]
+    #[should_panic(expected = "atom coordinates must be finite")]
+    fn infallible_atom_constructor_also_rejects_nonfinite_coordinates() {
+        let _ = Atom::new(Element::C, [0.0, f64::NAN, 0.0]);
+    }
+
+    #[test]
+    fn measurements_reject_nonfinite_results_from_finite_coordinates() {
+        let molecule = Molecule::from_atoms([
+            Atom::new(Element::C, [0.0, 1e200, 1e200]),
+            Atom::new(Element::C, [0.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.0, 0.0, 0.0]),
+            Atom::new(Element::C, [1.0, 1e200, 1e200]),
+        ]);
+        let [a, b, c, d] = [0, 1, 2, 3].map(AtomIndex::new);
+        assert_eq!(molecule.distance(a, b), Err(MeasurementError::NonFinite));
+        assert_eq!(molecule.angle(a, b, d), Err(MeasurementError::NonFinite));
+        assert_eq!(
+            molecule.dihedral(a, b, c, d),
+            Err(MeasurementError::NonFinite)
+        );
+        assert_eq!(
+            crate::Measurement::of(&molecule, [a, b, c, d]),
+            Err(MeasurementError::NonFinite)
+        );
+    }
+
     fn create_molecule() -> Molecule {
         let atoms = vec![
             Atom::new(Element::C, [1.0, 0.0, 0.0]),
@@ -591,7 +825,7 @@ mod tests {
         assert_eq!(format!("{index}"), "7");
     }
 
-    /// A two-atom molecule with `a` at the origin and `b` a distance `d` (Å)
+    /// A two-atom molecule with `a` at the origin and `b` a distance `d`
     /// along the x-axis, using the elements' default covalent radii.
     fn diatomic(a: Element, b: Element, d: f64) -> Molecule {
         Molecule::from_atoms([Atom::new(a, [0.0, 0.0, 0.0]), Atom::new(b, [d, 0.0, 0.0])])
