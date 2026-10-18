@@ -61,7 +61,7 @@ impl Selection {
     /// Creates an empty selection that holds at most `limit` atoms.
     ///
     /// Once full it rejects further atoms rather than dropping the oldest, so a
-    /// selection never changes under the user except where they clicked.
+    /// selection never changes except where they clicked.
     #[must_use]
     pub const fn with_limit(limit: usize) -> Self {
         Self {

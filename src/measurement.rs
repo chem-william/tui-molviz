@@ -41,7 +41,7 @@ pub enum MeasurementError {
 ///     .expect("two atoms measure a distance");
 /// assert_eq!(measured.to_string(), "C0–O1  1.210");
 ///
-/// // Fewer than two atoms is not an error — there is just nothing to measure.
+/// // There is nothing to measure between fewer than two atoms so it's Ok()
 /// assert_eq!(Measurement::of(&carbonyl, [AtomIndex::new(0)])?, None);
 /// # Ok::<(), tui_molviz::MeasurementError>(())
 /// ```
@@ -73,7 +73,7 @@ impl Measurement {
     /// Measures `atoms` against `molecule`: two atoms give a distance, three an
     /// angle at the middle atom, and four a dihedral about the middle pair.
     ///
-    /// The order of `atoms` is what picks the vertex and the torsion axis, so
+    /// The order of `atoms` picks the vertex and the torsion axis, so
     /// `[a, b, c]` and `[b, a, c]` are different angles.
     ///
     /// Positions are measured as the molecule stores them. [`Molecule`]
@@ -86,8 +86,8 @@ impl Measurement {
     /// `molecule`, and [`MeasurementError::Degenerate`] if the atoms are too
     /// close together, or too nearly collinear, for the quantity to be defined.
     ///
-    /// Zero, one, or more than four atoms is `Ok(None)` rather than an error:
-    /// it is a selection still being built, not a mistake.
+    /// Zero, one, or more than four atoms is `Ok(None)` as it's a selection
+    /// in-progress.
     pub fn of(
         molecule: &Molecule,
         atoms: impl AsRef<[AtomIndex]>,

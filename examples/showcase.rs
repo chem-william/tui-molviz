@@ -51,7 +51,7 @@ impl App {
     /// Cells the camera pans per shift+arrow keypress.
     const PAN_STEP_CELLS: i32 = 2;
     /// Four atoms is a dihedral, the largest quantity there is to measure, so
-    /// the selection stops there rather than growing without purpose.
+    /// the selection stops there.
     const MAX_SELECTED_ATOMS: usize = 4;
 
     fn new() -> Self {
@@ -243,8 +243,7 @@ impl App {
             return;
         };
         match canvas.pick_atom(self.camera, &self.molecule, (col, row)) {
-            // Clicking an unselected atom selects it, or deselects it if
-            // already selected. Once four are picked, further atoms are ignored
+            // Once four atoms are picked, further atoms are ignored
             // until one is released.
             Some(hit) => {
                 self.selection.toggle(hit);

@@ -316,17 +316,17 @@ pub struct MoleculeVisualizer<'a> {
     block: Option<Block<'a>>,
     /// Base style for the entire widget
     style: Style,
-    /// Whether to show molecule legend or not. Default is `true`
+    /// Whether to show molecule legend or not.
     show_molecule_legend: bool,
-    /// Whether to show bonds between atoms. Default is `true`
+    /// Whether to show bonds between atoms.
     show_bonds: bool,
     /// The camera used to display the molecule. Used to control rotation, zooming, and panning
     camera: Camera,
     /// Atoms to draw highlight markers on, in the order they were selected.
-    /// Out-of-range indices are ignored at render time. Default is empty.
+    /// Out-of-range indices are ignored at render time.
     highlight: Vec<AtomIndex>,
     /// Whether to draw the measurement overlay for 2, 3, or 4 highlighted
-    /// atoms. Default is `true`.
+    /// atoms.
     show_measurement: bool,
     /// Style of the highlight marker (its `fg` color is used). `None` disables
     /// the highlight even when [`highlight`](Self::highlight) is set.
@@ -455,11 +455,11 @@ impl<'a> MoleculeVisualizer<'a> {
 
     /// Sets whether to annotate the highlighted atoms with the quantity they
     /// measure — a distance for two, an angle for three, a dihedral for four —
-    /// drawing dashed connectors and printing the value on the canvas. Default
-    /// is `true`; it draws nothing until at least two atoms are highlighted.
+    /// drawing dashed connectors and printing the value on the canvas. It draws
+    /// nothing until at least two atoms are highlighted.
     ///
-    /// The connectors and the arc are drawn in the projection, but the printed number
-    /// is measured in the molecule's true 3-D coordinates.
+    /// The connectors are drawn in the projection, but the printed number is
+    /// measured in the molecule's actual coordinates.
     ///
     /// The value is the one [`Measurement::of`] returns for the same atoms, so a
     /// status line built from that agrees with the canvas.
@@ -576,17 +576,15 @@ impl MoleculeVisualizer<'_> {
         selected
     }
 
-    /// The radius of the highlight ring around atom `i`, in braille dots: the
-    /// drawn disk plus the gap that keeps the ring off it. The measurement
-    /// overlay starts its clearance here, so both read it from one place.
+    /// The radius of the highlight ring around atom `i`: the drawn disk plus
+    /// the gap that keeps the ring off it.
     fn ring_radius_dots(&self, canvas: &MoleculeCanvas, i: AtomIndex) -> f64 {
         canvas.atom_radius_dots(self.molecule.atoms()[i.get()].covalent_radius())
             + Self::HIGHLIGHT_RING_GAP_DOTS
     }
 
     /// The marker rings for `selected`, in canvas-data coords, flattened into
-    /// one point list: they share a color, so a single draw keeps the terminal's
-    /// color escapes down.
+    /// one point list. They share a color.
     fn highlight_rings(
         &self,
         selected: &[AtomIndex],
@@ -621,8 +619,6 @@ impl MoleculeVisualizer<'_> {
             return None;
         }
 
-        // The same call a consumer makes for their own status line, so the
-        // canvas label and the status line cannot disagree.
         let value = Measurement::of(self.molecule, selected).ok().flatten()?;
 
         let (bx, by) = canvas.half_bounds();
@@ -844,7 +840,7 @@ impl MoleculeVisualizer<'_> {
         }
         // Drawn last, on top of the atoms they mark, so the selection stays
         // visible. An empty ring list stays `None` so that an unhighlighted
-        // render issues no extra draw call at all.
+        // render does not issue an extra draw call.
         let selected = self.highlighted_indices();
         let marker_color = self.marker_color();
         let highlight_rings = marker_color

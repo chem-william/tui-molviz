@@ -45,9 +45,7 @@ fn reject(v: [f64; 3], axis: [f64; 3]) -> [f64; 3] {
 /// The angle at `vertex` between the arms reaching `a` and `c`, in radians over
 /// `[0, PI]`.
 ///
-/// `None` when either arm is shorter than [`DEGENERATE_LENGTH`] — an atom sits
-/// on the vertex, so its arm points nowhere. Collinear atoms are *not*
-/// degenerate as they just have a perfectly straight angle.
+/// `None` when either arm is shorter than [`DEGENERATE_LENGTH`].
 pub(crate) fn angle(a: [f64; 3], vertex: [f64; 3], c: [f64; 3]) -> Option<f64> {
     let (u, v) = (sub(a, vertex), sub(c, vertex));
     let (lu, lv) = (norm(u), norm(v));
@@ -56,7 +54,7 @@ pub(crate) fn angle(a: [f64; 3], vertex: [f64; 3], c: [f64; 3]) -> Option<f64> {
     }
 
     // Rounding can push the cosine outside [-1, 1] for (anti)parallel
-    // arms, where `acos` returns NaN. Clamping keeps an exactly straight angle
+    // arms, where `acos` returns `NaN`. Clamping keeps an exactly straight angle
     // reading as PI instead of poisoning every value derived from it.
     Some((dot(u, v) / (lu * lv)).clamp(-1.0, 1.0).acos())
 }
@@ -83,7 +81,7 @@ pub(crate) fn dihedral(a: [f64; 3], b: [f64; 3], c: [f64; 3], d: [f64; 3]) -> Op
         return None;
     }
 
-    // `atan2` of the two projections is signed and needs no clamping: `axis × v`
+    // `atan2` of the two projections is signed and needs no clamping: `axis x v`
     // completes a right-handed frame with `v`, so the arguments are the sine and
     // cosine of the torsion scaled by the same positive factor.
     Some(dot(cross(axis, v), w).atan2(dot(v, w)))
@@ -106,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn distance_is_the_euclidean_norm_of_the_separation() {
+    fn distance_is_euclidean_norm() {
         assert_close(
             distance([0.0, 0.0, 0.0], [3.0, 4.0, 0.0]),
             5.0,
