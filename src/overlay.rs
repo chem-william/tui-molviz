@@ -155,7 +155,7 @@ fn usable_length(len: f64) -> bool {
 }
 
 /// Draws the connector between `a` and `b` and reports where its label hangs
-/// off it: the midpoint of what was drawn, and how far to nudge the text clear.
+/// off it: the midpoint between the clearances, and how far to nudge the text clear.
 ///
 /// When the connector is dropped because the atoms overlap on screen, the label
 /// falls back to their shared centre — and has to clear their highlight rings by
@@ -196,8 +196,8 @@ fn span(m: Metrics, a: Anchor, b: Anchor) -> Option<((f64, f64), f64, f64)> {
 }
 
 /// Appends the braille points of a dashed segment from `a` to `b`, each end
-/// pulled back by that anchor's clearance, and returns the midpoint of what was
-/// actually drawn.
+/// pulled back by that anchor's clearance, and returns the midpoint of the
+/// span between the anchor clearances.
 fn push_dashes(
     points: &mut Vec<(f64, f64)>,
     m: Metrics,
@@ -205,23 +205,49 @@ fn push_dashes(
     b: Anchor,
 ) -> Option<(f64, f64)> {
     let ((ux, uy), start, end) = span(m, a, b)?;
+    let mid = f64::midpoint(start, end);
+    let midpoint = (a.x + ux * mid, a.y + uy * mid);
+
+    // Intersect the cleared span with both canvas axes before spending the
+    // sample budget. At high zoom, either anchor can be thousands of dots
+    // offscreen even though the connector passes through the viewport.
+    let (mut visible_start, mut visible_end) = (start, end);
+    for (origin, direction, bound) in [(a.x, ux, m.bx), (a.y, uy, m.by)] {
+        if direction == 0.0 {
+            if origin.abs() > bound {
+                return Some(midpoint);
+            }
+        } else {
+            let entry = (-bound - origin) / direction;
+            let exit = (bound - origin) / direction;
+            visible_start = visible_start.max(entry.min(exit));
+            visible_end = visible_end.min(entry.max(exit));
+        }
+    }
+    if visible_start >= visible_end {
+        return Some(midpoint);
+    }
 
     // Stepping by whole samples rather than accumulating a float phase means
-    // there is no drifting loop counter and no float modulo to mis-handle.
+    // there is no drifting loop counter.
     let step = m.dot / f64::from(SAMPLES_PER_DOT);
-    let samples = ((end - start) / step)
+    // Skip directly to the first visible sample, keeping the original dash
+    // phase so clipping does not shift the pattern as the camera pans.
+    let skipped = ((visible_start - start) / step).ceil();
+    let phase = skipped.rem_euclid(f64::from(PERIOD_SAMPLES)) as u32;
+    let sample_start = start + skipped * step;
+    let samples = ((visible_end - sample_start) / step)
         .ceil()
         .clamp(0.0, f64::from(MAX_SAMPLES_PER_SEGMENT)) as u32;
     for k in 0..samples {
-        if k % PERIOD_SAMPLES >= DASH_SAMPLES {
+        if (phase + k) % PERIOD_SAMPLES >= DASH_SAMPLES {
             continue;
         }
-        let along = start + f64::from(k) * step;
+        let along = sample_start + f64::from(k) * step;
         points.push((a.x + ux * along, a.y + uy * along));
     }
 
-    let mid = f64::midpoint(start, end);
-    Some((a.x + ux * mid, a.y + uy * mid))
+    Some(midpoint)
 }
 
 /// Appends an arc at `vertex` sweeping the projected angle from the `a` arm to
@@ -515,6 +541,68 @@ mod tests {
             gaps.iter().any(|g| *g > step * 1.5),
             "there should be gaps between the dashes"
         );
+    }
+
+    #[test]
+    fn zoomed_connectors_cross_the_visible_canvas() {
+        use crate::{MoleculeCanvas, camera::Camera};
+        use ratatui::layout::Rect;
+
+        let mut camera = Camera::new(0.0, 0.0, 100.0);
+        let canvas = MoleculeCanvas::new(Rect::new(0, 0, 80, 24), 1.0, camera.zoom());
+        let (bx, by) = canvas.half_bounds();
+        let m = Metrics {
+            dot: canvas.braille_dot(),
+            bx,
+            by,
+        };
+
+        for (dx, dy) in [(1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+            for offset in [0.0, 0.4, -0.4] {
+                camera.recenter();
+                camera.translate(offset * dx, offset * dy);
+                for direction in [1.0, -1.0] {
+                    let anchors = [-direction, direction].map(|t| {
+                        let (x, y, _) = camera.project_point(t * dx, t * dy, 0.0);
+                        Anchor {
+                            x,
+                            y,
+                            clearance: 8.0 * m.dot,
+                        }
+                    });
+                    let overlay = measurement(m, &anchors, &distance(), COLOR)
+                        .expect("a distance has an overlay");
+                    assert!(
+                        !overlay.points.is_empty(),
+                        "connector disappeared: ({dx}, {dy}), {offset}, {direction}"
+                    );
+                    assert!(
+                        overlay
+                            .points
+                            .iter()
+                            .all(|&(x, y)| { x.abs() <= bx + 1e-12 && y.abs() <= by + 1e-12 })
+                    );
+                    // Both halves of the visible span must be sampled.
+                    assert!(overlay.points.iter().any(|&(x, y)| x * dx + y * dy < 0.0));
+                    assert!(overlay.points.iter().any(|&(x, y)| x * dx + y * dy > 0.0));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn offscreen_connectors_have_no_samples() {
+        for (a, b) in [
+            (anchor(-20.0, 6.0), anchor(20.0, 6.0)),
+            (anchor(11.0, -20.0), anchor(11.0, 20.0)),
+            (anchor(-20.0, 0.0), anchor(-11.0, 0.0)),
+            (anchor(0.0, 6.0), anchor(0.0, 20.0)),
+            (anchor(-20.0, 0.0), anchor(0.0, 20.0)),
+        ] {
+            let overlay = measurement(metrics(), &[a, b], &distance(), COLOR)
+                .expect("an offscreen distance still has a label");
+            assert!(overlay.points.is_empty());
+        }
     }
 
     #[test]
